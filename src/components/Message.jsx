@@ -35,6 +35,7 @@ function renderMarkdown(content) {
     link.rel = 'noopener noreferrer'
   })
   documentNode.querySelectorAll('input[type="checkbox"]').forEach((input) => input.setAttribute('aria-label', 'Task item'))
+  documentNode.querySelectorAll('li > ul, li > ol, ol + ul').forEach((list) => list.classList.add('!pl-10'))
 
   const blocks = [...documentNode.body.children]
   let sectionLength = 0
