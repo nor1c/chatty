@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal, ArrowDown, ArrowRight, ChatCircle, DownloadSimple, Exam, GearSix, House, List, PaperPlaneRight, Plus, Sparkle, Stop, Trash, X } from '@phosphor-icons/react'
+import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal, ArrowDown, ArrowRight, ArrowSquareOut, ChatCircle, DownloadSimple, Exam, GearSix, House, List, PaperPlaneRight, Plus, Sparkle, Stop, Trash, X } from '@phosphor-icons/react'
 import Message from './components/Message'
 import SettingsPanel from './components/SettingsPanel'
 import Listbox from './components/Listbox'
@@ -13,7 +13,7 @@ import HomePortal from './components/HomePortal'
 import { AvatarTrio, CursorGlow, DoodleField, RobotMascot } from './components/CreativeVisuals'
 import { fetchModels, streamCompletion } from './lib/provider'
 import { downloadJson, loadState, saveState } from './lib/storage'
-import { chatPath, quizPaths, readRoute } from './lib/routes'
+import { chatPath, quizPaths, readRoute, workspacePath, workspacesPath } from './lib/routes'
 import { normalizeGrade, normalizeQuiz, parseQuizJson } from './lib/quiz'
 
 const id = () => crypto.randomUUID()
@@ -77,7 +77,7 @@ export default function App() {
   const [providers, setProviders] = useState(stored?.providers?.length ? stored.providers : [blankProvider])
   const [activeProvider, setActiveProvider] = useState(stored?.activeProvider || 0)
   const [models, setModels] = useState(stored?.models || [])
-  const [quizCategories, setQuizCategories] = useState(stored?.quizCategories?.length ? stored.quizCategories : [{ id: 'general-quiz', name: 'General' }])
+  const [quizCategories, setQuizCategories] = useState(() => (stored?.quizCategories || []).filter((category) => category.id !== 'general-quiz' || stored?.savedQuizzes?.some((quiz) => quiz.categoryId === category.id)))
   const [savedQuizzes, setSavedQuizzes] = useState(stored?.savedQuizzes || [])
   const [quizAttempts, setQuizAttempts] = useState(stored?.quizAttempts || [])
   const [workspaces, setWorkspaces] = useState(stored?.workspaces?.length ? stored.workspaces : [{ id: 'default', name: 'General', color: 'white', instructions: '' }])
@@ -88,13 +88,15 @@ export default function App() {
   })
   const initialRoute = useMemo(() => readRoute(), [])
   const initialRouteChat = conversations.find((chat) => chat.id === initialRoute.chatId)
+  const initialRouteWorkspace = workspaces.find((workspace) => workspace.id === initialRoute.workspaceId)
   const initialActiveId = initialRouteChat?.id || stored?.activeId || conversations[0].id
-  const [route, setRoute] = useState(initialRoute.page === 'quiz' || initialRouteChat ? initialRoute : { page: 'home', chatId: null })
+  const [route, setRoute] = useState(initialRoute.page === 'quiz' || initialRoute.page === 'workspaces' || initialRouteChat || initialRouteWorkspace ? initialRoute : { page: 'home', chatId: null })
   const [activeId, setActiveId] = useState(initialActiveId)
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => conversations.find((chat) => chat.id === initialActiveId)?.workspaceId || initialWorkspaceId)
   const [workspaceDialog, setWorkspaceDialog] = useState({ open: false, workspace: null })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarTab, setSidebarTab] = useState(initialRoute.page === 'quiz' ? 'quiz' : 'chat')
   const [sidebarVisible, setSidebarVisible] = useState(stored?.sidebarVisible ?? true)
   const [sidebarWidth, setSidebarWidth] = useState(clampSidebarWidth(stored?.sidebarWidth || 272))
   const [input, setInput] = useState('')
@@ -112,7 +114,7 @@ export default function App() {
   const scrollRef = useRef(null)
   const textareaRef = useRef(null)
   const activeConversation = conversations.find((item) => item.id === activeId) || conversations[0]
-  const activeWorkspace = workspaces.find((item) => item.id === activeConversation?.workspaceId) || workspaces.find((item) => item.id === activeWorkspaceId) || workspaces[0]
+  const activeWorkspace = workspaces.find((item) => item.id === route.workspaceId) || workspaces.find((item) => item.id === activeConversation?.workspaceId) || workspaces.find((item) => item.id === activeWorkspaceId) || workspaces[0]
   const messages = activeConversation?.messages || []
   const indexedMessages = messages.map((message, index) => ({ message, index }))
   const assistantMessages = indexedMessages.filter(({ message }) => message.role === 'assistant')
@@ -135,8 +137,8 @@ export default function App() {
   useEffect(() => { if (autoFollow && messages.length) virtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: streaming ? 'auto' : 'smooth' }) }, [messages.length, latestContent, autoFollow, streaming, virtualizer])
   useEffect(() => { virtualizer.measure() }, [wideChat, virtualizer])
   useEffect(() => {
-    if (initialRoute.page === 'chat' && !initialRouteChat) window.history.replaceState({}, '', '/')
-  }, [initialRoute.page, initialRouteChat])
+    if ((initialRoute.page === 'chat' && !initialRouteChat) || (initialRoute.page === 'workspace' && !initialRouteWorkspace)) window.history.replaceState({}, '', '/')
+  }, [initialRoute.page, initialRouteChat, initialRouteWorkspace])
   useEffect(() => {
     const onPopState = () => {
       const nextRoute = readRoute()
@@ -147,6 +149,11 @@ export default function App() {
         setActiveWorkspaceId(nextChat.workspaceId)
       } else if (nextRoute.page === 'quiz') {
         setRoute(nextRoute)
+      } else if (nextRoute.page === 'workspace' && workspaces.some((workspace) => workspace.id === nextRoute.workspaceId)) {
+        setRoute(nextRoute)
+        setActiveWorkspaceId(nextRoute.workspaceId)
+      } else if (nextRoute.page === 'workspaces') {
+        setRoute(nextRoute)
       } else {
         setRoute({ page: 'home', chatId: null })
       }
@@ -154,8 +161,8 @@ export default function App() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [conversations])
-  useEffect(() => { document.title = route.page === 'chat' ? `${activeConversation?.title || 'Chat'} · ShinkuChat` : route.page === 'quiz' ? 'Quiz · ShinkuChat' : 'ShinkuChat · Home' }, [route.page, activeConversation?.title])
+  }, [conversations, workspaces])
+  useEffect(() => { document.title = route.page === 'chat' ? `${activeConversation?.title || 'Chat'} · ShinkuChat` : route.page === 'workspace' ? `${activeWorkspace?.name || 'Workspace'} · ShinkuChat` : route.page === 'quiz' ? 'Quiz · ShinkuChat' : 'ShinkuChat · Home' }, [route.page, activeConversation?.title, activeWorkspace?.name])
 
   const startSidebarResize = (event) => {
     if (window.matchMedia('(max-width: 767px)').matches) return
@@ -183,7 +190,9 @@ export default function App() {
   const updateConversation = useCallback((updater) => setConversations((all) => all.map((conversation) => conversation.id === activeId ? updater(conversation) : conversation)), [activeId])
   const navigateHome = () => { window.history.pushState({}, '', '/'); setRoute({ page: 'home', chatId: null }); setSidebarOpen(false) }
   const navigateQuizRoute = (nextRoute, path, replace = false) => { window.history[replace ? 'replaceState' : 'pushState']({}, '', path); setRoute(nextRoute); setSidebarOpen(false) }
-  const navigateQuiz = () => navigateQuizRoute({ page: 'quiz', quizView: 'categories' }, quizPaths.categories)
+  const navigateQuiz = () => { setSidebarTab('quiz'); navigateQuizRoute({ page: 'quiz', quizView: 'categories' }, quizPaths.categories) }
+  const navigateWorkspaces = () => { setSidebarTab('chat'); window.history.pushState({}, '', workspacesPath); setRoute({ page: 'workspaces' }); setSidebarOpen(false) }
+  const openWorkspace = (workspace) => { window.history.pushState({}, '', workspacePath(workspace.id)); setRoute({ page: 'workspace', workspaceId: workspace.id }); setActiveWorkspaceId(workspace.id); setSidebarOpen(false) }
   const openChat = (chat, replace = false) => {
     window.history[replace ? 'replaceState' : 'pushState']({}, '', chatPath(chat.id))
     setRoute({ page: 'chat', chatId: chat.id })
@@ -296,16 +305,15 @@ export default function App() {
       <button type="button" aria-label={`Resize sidebar, current width ${sidebarWidth} pixels`} aria-valuemin="240" aria-valuemax="352" aria-valuenow={sidebarWidth} role="separator" title="Drag to resize · Double-click to reset" onPointerDown={startSidebarResize} onDoubleClick={() => setSidebarWidth(272)} onKeyDown={resizeSidebarWithKeyboard} className="absolute inset-y-0 right-0 z-20 hidden w-2 cursor-col-resize touch-none items-center justify-center focus:outline-none focus-visible:bg-purple-500/10 md:flex"><span className="h-10 w-0.5 rounded-full bg-slate-300 opacity-0 transition-opacity duration-300 ease-out hover:opacity-100 focus:opacity-100 dark:bg-slate-600" /></button>
       <div aria-hidden="true" className="absolute -left-20 top-16 h-44 w-44 animate-pulse rounded-full bg-purple-300/20 blur-3xl motion-reduce:animate-none dark:bg-purple-600/10" />
       <div className="relative flex h-10 items-center gap-2 px-1"><div className="group flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-700 to-purple-500 text-white shadow-[0_8px_20px_rgba(126,34,206,0.25)] transition-transform duration-500 motion-reduce:transform-none"><Sparkle size={17} weight="fill" /></div><span className="text-base leading-6 font-semibold tracking-tight">ShinkuChat</span><span className="ml-auto rounded-full bg-purple-100 px-2 py-0.5 text-sm font-medium text-purple-700 dark:bg-purple-500/15 dark:text-purple-300">AI</span><button type="button" onClick={() => setSidebarVisible(false)} aria-label="Hide sidebar" title="Hide sidebar" className="hidden h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 md:flex dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><X size={15} /></button></div>
-      <button onClick={navigateHome} aria-current={route.page === 'home' ? 'page' : undefined} className={`${button} mt-3 w-full justify-start gap-2 px-2 ${route.page === 'home' ? 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-200' : ''}`}><House size={17} weight={route.page === 'home' ? 'fill' : 'regular'} />Home</button>
-      <button onClick={() => setWorkspaceDialog({ open: true, workspace: null })} className="group relative mt-2 flex h-10 w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 px-3 text-sm font-medium text-white shadow-[0_10px_26px_rgba(126,34,206,0.24)] transition-[transform,box-shadow] duration-300 ease-out active:scale-[0.97] motion-reduce:transform-none"><span className="absolute inset-y-0 -left-8 w-6 -skew-x-12 bg-white/20 transition-transform duration-700" /><Plus size={17} />New workspace</button>
-      <div className="relative mt-4 flex items-center justify-between px-2"><p className="text-[13px] leading-[18px] font-medium uppercase tracking-[0.16em] text-slate-500">Workspaces</p><svg aria-hidden="true" viewBox="0 0 44 12" className="h-3 w-11 text-purple-300"><path d="M2 7c11-8 18 7 40-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg></div>
-      <nav className="mt-2 flex-1 space-y-3 overflow-y-auto">{workspaces.map((workspace) => {
+      <div className="mt-3 space-y-1"><button onClick={navigateHome} aria-current={route.page === 'home' ? 'page' : undefined} className={`${button} w-full justify-start gap-2 px-2 ${route.page === 'home' ? 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-200' : ''}`}><House size={17} weight={route.page === 'home' ? 'fill' : 'regular'} />Home</button><button onClick={navigateWorkspaces} aria-current={route.page === 'workspaces' || route.page === 'workspace' || route.page === 'chat' ? 'page' : undefined} className={`${button} w-full justify-start gap-2 px-2 ${route.page === 'workspaces' || route.page === 'workspace' || route.page === 'chat' ? 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-200' : ''}`}><ChatCircle size={17} weight={route.page === 'workspaces' || route.page === 'workspace' || route.page === 'chat' ? 'fill' : 'regular'} />Chat</button><button onClick={navigateQuiz} aria-current={route.page === 'quiz' ? 'page' : undefined} className={`${button} w-full justify-start gap-2 px-2 ${route.page === 'quiz' ? 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-200' : ''}`}><Exam size={17} weight={route.page === 'quiz' ? 'fill' : 'regular'} />Quiz</button></div>
+      <div className="relative mt-4 grid grid-cols-2 rounded-lg bg-slate-100 p-1 dark:bg-white/5" role="tablist" aria-label="Sidebar content"><button type="button" role="tab" aria-selected={sidebarTab === 'chat'} onClick={() => setSidebarTab('chat')} className={`flex h-8 items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-[background-color,color,box-shadow] duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-purple-500/10 ${sidebarTab === 'chat' ? 'bg-white text-purple-700 shadow-[0_4px_12px_rgba(76,29,149,0.12)] dark:bg-slate-800 dark:text-purple-300' : 'text-slate-500 hover:text-purple-700 dark:hover:text-purple-300'}`}><ChatCircle size={16} />Chat</button><button type="button" role="tab" aria-selected={sidebarTab === 'quiz'} onClick={() => setSidebarTab('quiz')} className={`flex h-8 items-center justify-center gap-1.5 rounded-md text-[13px] font-medium transition-[background-color,color,box-shadow] duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-purple-500/10 ${sidebarTab === 'quiz' ? 'bg-white text-purple-700 shadow-[0_4px_12px_rgba(76,29,149,0.12)] dark:bg-slate-800 dark:text-purple-300' : 'text-slate-500 hover:text-purple-700 dark:hover:text-purple-300'}`}><Exam size={16} />Quiz</button></div>
+      {sidebarTab === 'quiz' ? <nav aria-label="Quiz categories" className="mt-2 flex-1 space-y-1 overflow-y-auto">{quizCategories.map((category) => { const categoryQuizzes = savedQuizzes.filter((quiz) => quiz.categoryId === category.id); return <section key={category.id} aria-label={category.name}><button onClick={() => navigateQuizRoute({ page: 'quiz', quizView: 'category', categoryId: category.id }, quizPaths.category(category.id))} className={`flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left transition-colors duration-300 ease-out hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-white/5 ${route.categoryId === category.id ? 'bg-purple-100 text-purple-900 dark:bg-purple-500/15 dark:text-purple-100' : ''}`}><Exam size={16} className="shrink-0 text-purple-600 dark:text-purple-300" /><span className="min-w-0 flex-1 truncate text-sm font-semibold">{category.name}</span><span className="text-xs tabular-nums text-slate-400">{categoryQuizzes.length}</span></button><div className="mt-0.5 space-y-0.5">{categoryQuizzes.map((quiz) => <button key={quiz.id} onClick={() => navigateQuizRoute({ page: 'quiz', quizView: 'detail', quizId: quiz.id }, quizPaths.detail(quiz.id))} className={`flex w-full items-center gap-2 rounded-lg py-1.5 pl-5 pr-2 text-left transition-colors duration-300 ease-out hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-white/5 ${route.quizId === quiz.id ? 'bg-purple-100 text-purple-900 dark:bg-purple-500/15 dark:text-purple-100' : ''}`}><Exam size={15} className="shrink-0" /><span className="truncate text-sm">{quiz.title}</span></button>)}</div></section> })}</nav> : <nav aria-label="Chat workspaces" className="mt-2 flex-1 space-y-3 overflow-y-auto">{workspaces.map((workspace) => {
         const workspaceChats = conversations.filter((chat) => chat.workspaceId === workspace.id)
         return <section key={workspace.id} aria-label={workspace.name}>
-          <div className={`flex h-9 items-center gap-1 rounded-lg px-1.5 ${workspace.id === activeWorkspace?.id ? 'bg-slate-100 dark:bg-white/5' : ''}`}><span className={`h-3 w-3 shrink-0 rounded-md border border-slate-200 ${workspace.color === 'purple' ? 'bg-purple-200 dark:border-purple-700 dark:bg-purple-800' : workspace.color === 'blue' ? 'bg-blue-200 dark:border-blue-700 dark:bg-blue-800' : workspace.color === 'teal' ? 'bg-teal-200 dark:border-teal-700 dark:bg-teal-800' : 'bg-white dark:border-slate-600 dark:bg-slate-800'}`} /><span className="min-w-0 flex-1 truncate text-sm font-semibold">{workspace.name}</span><button onClick={() => setWorkspaceDialog({ open: true, workspace })} aria-label={`Edit ${workspace.name}`} title="Workspace settings" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><GearSix size={15} /></button></div>
+          <div className={`flex h-9 items-center gap-1 rounded-lg px-1.5 ${workspace.id === activeWorkspace?.id ? 'bg-slate-100 dark:bg-white/5' : ''}`}><span className={`h-3 w-3 shrink-0 rounded-md border border-slate-200 ${workspace.color === 'purple' ? 'bg-purple-200 dark:border-purple-700 dark:bg-purple-800' : workspace.color === 'blue' ? 'bg-blue-200 dark:border-blue-700 dark:bg-blue-800' : workspace.color === 'teal' ? 'bg-teal-200 dark:border-teal-700 dark:bg-teal-800' : 'bg-white dark:border-slate-600 dark:bg-slate-800'}`} /><span className="min-w-0 flex-1 truncate text-sm font-semibold">{workspace.name}</span><button onClick={() => newChat(workspace.id)} aria-label={`Add chat to ${workspace.name}`} title="New chat" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><Plus size={15} /></button><button onClick={() => openWorkspace(workspace)} aria-label={`View ${workspace.name} details`} title="Workspace details" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><ArrowSquareOut size={15} /></button><button onClick={() => setWorkspaceDialog({ open: true, workspace })} aria-label={`Edit ${workspace.name}`} title="Workspace settings" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><GearSix size={15} /></button></div>
           <div className="mt-1 space-y-0.5">{workspaceChats.map((chat) => <div key={chat.id} className={`group flex items-center rounded-lg transition-colors duration-300 ease-out ${route.page === 'chat' && chat.id === activeId ? 'bg-purple-100 text-purple-900 dark:bg-purple-500/15 dark:text-purple-100' : 'hover:bg-purple-50 dark:hover:bg-white/5'}`}><button onClick={() => selectChat(chat)} className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-4 pr-2 text-left"><ChatCircle size={16} className="shrink-0" /><span className="truncate text-sm">{chat.title}</span></button><button aria-label={`Delete ${chat.title}`} onClick={() => deleteChat(chat.id)} className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-colors duration-300 ease-out hover:bg-slate-200 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-slate-700"><Trash size={15} /></button></div>)}{!workspaceChats.length && <p className="ml-4 px-2 py-2 text-xs text-slate-400">No conversations</p>}</div>
         </section>
-      })}</nav>
+      })}</nav>}
       <div className="relative mb-2 flex items-end justify-center gap-1"><RobotMascot compact className="animate-[bounce_5s_ease-in-out_infinite] motion-reduce:animate-none" /><AvatarTrio /></div>
       <div className="relative space-y-1 border-t border-purple-100 pt-2 dark:border-white/5"><button onClick={() => downloadJson({ workspaces, conversations, quizCategories, savedQuizzes, quizAttempts }, 'shinkuchat-export.json')} className={`${button} w-full justify-start gap-2 px-2`}><DownloadSimple size={17} />Export chats</button><button onClick={() => setSettingsOpen(true)} className={`${button} w-full justify-start gap-2 px-2`}><GearSix size={17} />Provider & model</button></div>
     </aside>
@@ -316,7 +324,7 @@ export default function App() {
       <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation" className={`${button} absolute left-3 top-3 z-20 w-9 bg-white/80 backdrop-blur-md md:hidden dark:bg-slate-900/80`}><List size={18} /></button>
       {!sidebarVisible && <button onClick={() => setSidebarVisible(true)} aria-label="Show sidebar" title="Show sidebar" className={`${button} absolute left-3 top-3 z-20 hidden w-9 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.14)] backdrop-blur-md md:flex dark:bg-slate-900/80 dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]`}><List size={18} /></button>}
 
-      {route.page === 'quiz' ? <QuizPage route={route} onNavigate={navigateQuizRoute} providerReady={Boolean(provider.baseUrl && provider.model)} categories={quizCategories} quizzes={savedQuizzes} attempts={quizAttempts} onAddCategory={(category) => setQuizCategories((all) => [...all, category])} onSaveQuiz={(quiz) => setSavedQuizzes((all) => [quiz, ...all])} onSaveAttempt={(attempt) => setQuizAttempts((all) => [attempt, ...all])} onOpenSettings={() => setSettingsOpen(true)} onGenerate={generateQuiz} onGrade={gradeQuiz} /> : route.page === 'home' ? <HomePortal workspaces={workspaces} conversations={conversations} onOpenChat={selectChat} onNewChat={newChat} onOpenQuiz={navigateQuiz} /> : <>
+      {route.page === 'quiz' ? <QuizPage route={route} onNavigate={navigateQuizRoute} providerReady={Boolean(provider.baseUrl && provider.model)} categories={quizCategories} quizzes={savedQuizzes} attempts={quizAttempts} onAddCategory={(category) => setQuizCategories((all) => [...all, category])} onSaveQuiz={(quiz) => setSavedQuizzes((all) => [quiz, ...all])} onSaveAttempt={(attempt) => setQuizAttempts((all) => [attempt, ...all])} onOpenSettings={() => setSettingsOpen(true)} onGenerate={generateQuiz} onGrade={gradeQuiz} /> : route.page === 'home' || route.page === 'workspaces' || route.page === 'workspace' ? <HomePortal key={route.page === 'workspace' ? route.workspaceId : route.page} workspaces={workspaces} conversations={conversations} onOpenChat={selectChat} onNewChat={newChat} onAddWorkspace={() => setWorkspaceDialog({ open: true, workspace: null })} onOpenQuiz={navigateQuiz} initialView={route.page === 'workspaces' ? 'chat' : 'root'} initialWorkspaceId={route.page === 'workspace' ? route.workspaceId : null} onLeaveWorkspace={navigateWorkspaces} /> : <>
       {assistantMessages.length > 1 && <><span aria-hidden="true" className="pointer-events-none absolute left-1 top-1/2 z-10 h-14 w-1 -translate-y-1/2 rounded-full bg-purple-400/70 shadow-[0_0_12px_rgba(168,85,247,0.35)] sm:left-2 dark:bg-purple-400/60" /><nav aria-label="AI response navigator" className="absolute left-1 top-1/2 z-20 flex max-h-[min(64vh,420px)] w-8 -translate-y-1/2 flex-col overflow-x-hidden overflow-y-auto rounded-xl bg-white/90 p-1.5 opacity-0 shadow-[0_10px_28px_rgba(76,29,149,0.16)] backdrop-blur-md transition-opacity duration-300 ease-out hover:w-32 hover:opacity-100 focus-within:w-32 focus-within:opacity-100 dark:bg-slate-900/90 dark:shadow-[0_12px_32px_rgba(0,0,0,0.35)] sm:left-2 sm:hover:w-44 sm:focus-within:w-44">
         <span aria-hidden="true" className="absolute bottom-4 left-[17px] top-4 w-px bg-gradient-to-b from-purple-200 via-purple-400 to-purple-200 dark:from-purple-500/20 dark:via-purple-400 dark:to-purple-500/20" />
         {assistantMessages.map(({ message, index }, responseIndex) => {

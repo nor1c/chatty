@@ -1,4 +1,6 @@
 const CHAT_PREFIX = '/chat/'
+const WORKSPACE_PREFIX = '/workspace/'
+const WORKSPACES_PATH = '/workspaces'
 const QUIZ_PREFIX = '/quiz'
 
 const decodeSegment = (value) => {
@@ -8,6 +10,7 @@ const decodeSegment = (value) => {
 export function readRoute(pathname = window.location.pathname) {
   const normalized = pathname.replace(/\/+$/, '') || '/'
   if (normalized === '/') return { page: 'home', chatId: null }
+  if (normalized === WORKSPACES_PATH) return { page: 'workspaces' }
   if (normalized === QUIZ_PREFIX) return { page: 'quiz', quizView: 'categories' }
 
   const segments = normalized.split('/').filter(Boolean)
@@ -34,6 +37,14 @@ export function readRoute(pathname = window.location.pathname) {
     }
   }
 
+  if (normalized.startsWith(WORKSPACE_PREFIX)) {
+    const encodedId = normalized.slice(WORKSPACE_PREFIX.length)
+    if (encodedId && !encodedId.includes('/')) {
+      const workspaceId = decodeSegment(encodedId)
+      if (workspaceId) return { page: 'workspace', workspaceId }
+    }
+  }
+
   if (normalized.startsWith(CHAT_PREFIX)) {
     const encodedId = normalized.slice(CHAT_PREFIX.length)
     if (encodedId && !encodedId.includes('/')) {
@@ -47,6 +58,12 @@ export function readRoute(pathname = window.location.pathname) {
 export function chatPath(chatId) {
   return `${CHAT_PREFIX}${encodeURIComponent(chatId)}`
 }
+
+export function workspacePath(workspaceId) {
+  return `${WORKSPACE_PREFIX}${encodeURIComponent(workspaceId)}`
+}
+
+export const workspacesPath = WORKSPACES_PATH
 
 export const quizPaths = {
   categories: QUIZ_PREFIX,
