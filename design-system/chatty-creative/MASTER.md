@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** Chatty Creative
+**Project:** ShinkuChat Creative
 **Generated:** 2026-08-11 21:54:33
 **Category:** AI/Chatbot Platform
 **Design Dials:** Variance 8/10 (Bold / Asymmetric) | Motion 8/10 (Complex) | Density 6/10 (Standard)

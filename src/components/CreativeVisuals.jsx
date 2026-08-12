@@ -12,7 +12,7 @@ export function CursorGlow() {
 }
 
 export function RobotMascot({ compact = false, className = '' }) {
-  return <svg viewBox="0 0 220 180" aria-label="Chatty robot mascot" role="img" className={`${compact ? 'h-20 w-24' : 'h-40 w-48'} ${className}`}>
+  return <svg viewBox="0 0 220 180" aria-label="ShinkuChat robot mascot" role="img" className={`${compact ? 'h-20 w-24' : 'h-40 w-48'} ${className}`}>
     <g className="origin-center animate-[pulse_4s_ease-in-out_infinite] motion-reduce:animate-none">
       <path d="M44 103c-17-35 6-72 43-78 39-7 78 17 87 52 9 38-16 74-55 80-31 5-62-10-75-54Z" className="fill-purple-100 stroke-purple-500 dark:fill-purple-500/15 dark:stroke-purple-300" strokeWidth="3" />
       <path d="M70 63c22-17 57-12 72 11 14 22 5 49-19 61-23 11-54 2-65-20-9-19-4-39 12-52Z" className="fill-white dark:fill-slate-900" />
@@ -31,7 +31,7 @@ export function AvatarTrio() {
     ['bg-purple-200 dark:bg-purple-400/20', 'M8 16c3 3 10 3 13 0', 'M11 10h1m6 0h1'],
     ['bg-slate-200 dark:bg-slate-700', 'M9 17c4-2 8-2 12 0', 'M10 10h2m5 0h2'],
   ]
-  return <div className="flex -space-x-2" aria-label="Three illustrated Chatty personas">{faces.map(([tone, mouth, eyes], index) => <svg key={mouth} viewBox="0 0 30 30" className={`h-8 w-8 rounded-full ring-2 ring-white transition-[transform,box-shadow] duration-300  motion-reduce:transform-none dark:ring-slate-950 ${tone}`} role="img" aria-label={`Illustrated persona ${index + 1}`} ><circle cx="15" cy="15" r="12" fill="none" className="stroke-purple-500 dark:stroke-purple-300" strokeWidth="1.5" /><path d={mouth} fill="none" className="stroke-purple-700 dark:stroke-purple-200" strokeWidth="1.5" strokeLinecap="round" /><path d={eyes} className="stroke-purple-700 dark:stroke-purple-200" strokeWidth="2" strokeLinecap="round" /></svg>)}</div>
+  return <div className="flex -space-x-2" aria-label="Three illustrated ShinkuChat personas">{faces.map(([tone, mouth, eyes], index) => <svg key={mouth} viewBox="0 0 30 30" className={`h-8 w-8 rounded-full ring-2 ring-white transition-[transform,box-shadow] duration-300  motion-reduce:transform-none dark:ring-slate-950 ${tone}`} role="img" aria-label={`Illustrated persona ${index + 1}`} ><circle cx="15" cy="15" r="12" fill="none" className="stroke-purple-500 dark:stroke-purple-300" strokeWidth="1.5" /><path d={mouth} fill="none" className="stroke-purple-700 dark:stroke-purple-200" strokeWidth="1.5" strokeLinecap="round" /><path d={eyes} className="stroke-purple-700 dark:stroke-purple-200" strokeWidth="2" strokeLinecap="round" /></svg>)}</div>
 }
 
 export function DoodleField() {

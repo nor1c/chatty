@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** Chatty
+**Project:** ShinkuChat
 **Generated:** 2026-08-11 21:35:57
 **Category:** AI/Chatbot Platform
 **Design Dials:** Variance 5/10 (Balanced / Modern) | Motion 4/10 (Standard) | Density 7/10 (Standard)
