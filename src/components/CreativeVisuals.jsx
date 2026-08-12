@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { ArrowRight, Brain, ChatCircleDots, Code, Lightbulb, PaperPlaneTilt, Sparkle } from '@phosphor-icons/react'
 
 export function CursorGlow() {
   const glowRef = useRef(null)
@@ -46,25 +45,4 @@ export function DoodleField() {
     <svg className="absolute right-[22%] top-[22%] h-8 w-8 animate-[spin_14s_linear_infinite] text-purple-400/40 motion-reduce:animate-none" viewBox="0 0 32 32"><path d="m16 1 4 11 11 4-11 4-4 11-4-11-11-4 11-4Z" fill="currentColor" /></svg>
     <svg className="absolute left-[28%] top-[30%] h-6 w-32 text-purple-500/40" viewBox="0 0 128 24"><path d="M2 15c25-14 51 12 76-2 17-9 32-4 48 1" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
   </div>
-}
-
-const prompts = [
-  { icon: <Lightbulb size={17} />, title: 'Brainstorm ideas', prompt: 'Help me brainstorm unique digital product ideas' },
-  { icon: <Code size={17} />, title: 'Write code', prompt: 'Help me build an accessible React component' },
-  { icon: <Brain size={17} />, title: 'Learn quickly', prompt: 'Explain a complex concept with a simple analogy' },
-]
-
-export function EmptyState({ onPrompt, providerReady }) {
-  return <section className="relative flex min-h-full items-center justify-center overflow-hidden px-4 py-6">
-    <DoodleField />
-    <div className="absolute left-1/4 top-1/4 h-48 w-48 animate-pulse rounded-full bg-purple-300/20 blur-3xl motion-reduce:animate-none dark:bg-purple-700/10" />
-    <div className="absolute bottom-1/4 right-1/4 h-56 w-56 animate-pulse rounded-full bg-purple-200/30 blur-3xl [animation-delay:1s] motion-reduce:animate-none dark:bg-purple-500/10" />
-    <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center text-center">
-      <div className="relative animate-[bounce_5s_ease-in-out_infinite] motion-reduce:animate-none"><RobotMascot /><span className="absolute right-0 top-5 rounded-full bg-white/80 px-2.5 py-1 text-sm font-medium text-purple-700 shadow-[0_8px_24px_rgba(88,28,135,0.14)] backdrop-blur-md dark:bg-slate-900/80 dark:text-purple-200"><Sparkle size={13} className="mr-1 inline" weight="fill" />online</span></div>
-      <div className="overflow-hidden"><h2 className="animate-[pulse_1s_ease-out_1] text-base font-medium leading-6 tracking-tight text-slate-950 motion-reduce:animate-none dark:text-white">What would you like to <span className="bg-gradient-to-r from-purple-700 via-purple-500 to-purple-400 bg-clip-text text-transparent">create?</span></h2></div>
-      <p className="mt-2 max-w-xl text-sm leading-5 text-slate-600 dark:text-slate-300">Start a conversation, solve a problem, or turn a rough idea into something real with Chatty.</p>
-      <div className="mt-5 grid w-full gap-2 sm:grid-cols-3">{prompts.map(({ icon, title, prompt }, index) => <button key={title} onClick={() => onPrompt(prompt)} className={`group relative overflow-hidden rounded-xl border border-purple-100 bg-white/70 p-4 text-left shadow-[0_8px_24px_rgba(76,29,149,0.10)] backdrop-blur-md transition-[transform,box-shadow,border-color] duration-500 ease-out hover:border-purple-300  active:scale-[0.97] motion-reduce:transform-none dark:border-white/10 dark:bg-slate-900/60 dark:hover:border-purple-500/40 ${index === 1 ? 'motion-reduce:translate-y-0' : ''}`}><span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 text-purple-700 transition-transform duration-500 ease-out dark:bg-purple-500/15 dark:text-purple-300">{icon}</span><span className="flex items-center justify-between text-[15px] leading-6 font-medium text-slate-900 dark:text-white">{title}<ArrowRight size={15} className="translate-x-1 opacity-0 transition-[transform,opacity] duration-300 group-hover:opacity-100" /></span><span className="mt-1 block text-sm leading-5 text-slate-500 dark:text-slate-400">{prompt}</span></button>)}</div>
-      {!providerReady && <button onClick={() => onPrompt(null)} className="mt-4 flex h-9 items-center gap-2 rounded-full bg-purple-100 px-4 text-sm font-medium text-purple-800 transition-[transform,background-color] duration-300 hover:bg-purple-200 active:scale-[0.97] dark:bg-purple-500/15 dark:text-purple-200 dark:hover:bg-purple-500/25"><ChatCircleDots size={16} />Connect a provider to begin<PaperPlaneTilt size={14} /></button>}
-    </div>
-  </section>
 }
