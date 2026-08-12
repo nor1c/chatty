@@ -13,7 +13,7 @@ import HomePortal from './components/HomePortal'
 import { AvatarTrio, CursorGlow, DoodleField, RobotMascot } from './components/CreativeVisuals'
 import { fetchModels, streamCompletion } from './lib/provider'
 import { downloadJson, loadState, saveState } from './lib/storage'
-import { chatPath, readRoute } from './lib/routes'
+import { chatPath, quizPaths, readRoute } from './lib/routes'
 import { normalizeGrade, normalizeQuiz, parseQuizJson } from './lib/quiz'
 
 const id = () => crypto.randomUUID()
@@ -182,7 +182,8 @@ export default function App() {
 
   const updateConversation = useCallback((updater) => setConversations((all) => all.map((conversation) => conversation.id === activeId ? updater(conversation) : conversation)), [activeId])
   const navigateHome = () => { window.history.pushState({}, '', '/'); setRoute({ page: 'home', chatId: null }); setSidebarOpen(false) }
-  const navigateQuiz = () => { window.history.pushState({}, '', '/quiz'); setRoute({ page: 'quiz', chatId: null }); setSidebarOpen(false) }
+  const navigateQuizRoute = (nextRoute, path, replace = false) => { window.history[replace ? 'replaceState' : 'pushState']({}, '', path); setRoute(nextRoute); setSidebarOpen(false) }
+  const navigateQuiz = () => navigateQuizRoute({ page: 'quiz', quizView: 'categories' }, quizPaths.categories)
   const openChat = (chat, replace = false) => {
     window.history[replace ? 'replaceState' : 'pushState']({}, '', chatPath(chat.id))
     setRoute({ page: 'chat', chatId: chat.id })
@@ -315,7 +316,7 @@ export default function App() {
       <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation" className={`${button} absolute left-3 top-3 z-20 w-9 bg-white/80 backdrop-blur-md md:hidden dark:bg-slate-900/80`}><List size={18} /></button>
       {!sidebarVisible && <button onClick={() => setSidebarVisible(true)} aria-label="Show sidebar" title="Show sidebar" className={`${button} absolute left-3 top-3 z-20 hidden w-9 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.14)] backdrop-blur-md md:flex dark:bg-slate-900/80 dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]`}><List size={18} /></button>}
 
-      {route.page === 'quiz' ? <QuizPage providerReady={Boolean(provider.baseUrl && provider.model)} categories={quizCategories} quizzes={savedQuizzes} attempts={quizAttempts} onAddCategory={(category) => setQuizCategories((all) => [...all, category])} onSaveQuiz={(quiz) => setSavedQuizzes((all) => [quiz, ...all])} onSaveAttempt={(attempt) => setQuizAttempts((all) => [attempt, ...all])} onOpenSettings={() => setSettingsOpen(true)} onGenerate={generateQuiz} onGrade={gradeQuiz} /> : route.page === 'home' ? <HomePortal workspaces={workspaces} conversations={conversations} onOpenChat={selectChat} onNewChat={newChat} onOpenQuiz={navigateQuiz} /> : <>
+      {route.page === 'quiz' ? <QuizPage route={route} onNavigate={navigateQuizRoute} providerReady={Boolean(provider.baseUrl && provider.model)} categories={quizCategories} quizzes={savedQuizzes} attempts={quizAttempts} onAddCategory={(category) => setQuizCategories((all) => [...all, category])} onSaveQuiz={(quiz) => setSavedQuizzes((all) => [quiz, ...all])} onSaveAttempt={(attempt) => setQuizAttempts((all) => [attempt, ...all])} onOpenSettings={() => setSettingsOpen(true)} onGenerate={generateQuiz} onGrade={gradeQuiz} /> : route.page === 'home' ? <HomePortal workspaces={workspaces} conversations={conversations} onOpenChat={selectChat} onNewChat={newChat} onOpenQuiz={navigateQuiz} /> : <>
       {assistantMessages.length > 1 && <><span aria-hidden="true" className="pointer-events-none absolute left-1 top-1/2 z-10 h-14 w-1 -translate-y-1/2 rounded-full bg-purple-400/70 shadow-[0_0_12px_rgba(168,85,247,0.35)] sm:left-2 dark:bg-purple-400/60" /><nav aria-label="AI response navigator" className="absolute left-1 top-1/2 z-20 flex max-h-[min(64vh,420px)] w-8 -translate-y-1/2 flex-col overflow-x-hidden overflow-y-auto rounded-xl bg-white/90 p-1.5 opacity-0 shadow-[0_10px_28px_rgba(76,29,149,0.16)] backdrop-blur-md transition-opacity duration-300 ease-out hover:w-32 hover:opacity-100 focus-within:w-32 focus-within:opacity-100 dark:bg-slate-900/90 dark:shadow-[0_12px_32px_rgba(0,0,0,0.35)] sm:left-2 sm:hover:w-44 sm:focus-within:w-44">
         <span aria-hidden="true" className="absolute bottom-4 left-[17px] top-4 w-px bg-gradient-to-b from-purple-200 via-purple-400 to-purple-200 dark:from-purple-500/20 dark:via-purple-400 dark:to-purple-500/20" />
         {assistantMessages.map(({ message, index }, responseIndex) => {
