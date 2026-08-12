@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal, ArrowDown, ArrowRight, ChatCircle, DownloadSimple, GearSix, House, List, PaperPlaneRight, Plus, Sparkle, Stop, Trash, X } from '@phosphor-icons/react'
+import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal, ArrowDown, ArrowRight, ChatCircle, DownloadSimple, Exam, GearSix, House, List, PaperPlaneRight, Plus, Sparkle, Stop, Trash, X } from '@phosphor-icons/react'
 import Message from './components/Message'
 import SettingsPanel from './components/SettingsPanel'
 import Listbox from './components/Listbox'
@@ -8,10 +8,13 @@ import ContextMeter from './components/ContextMeter'
 import SelectionToolbar from './components/SelectionToolbar'
 import QuickAskPopup from './components/QuickAskPopup'
 import WorkspaceDialog from './components/WorkspaceDialog'
+import QuizPage from './components/QuizPage'
+import HomePortal from './components/HomePortal'
 import { AvatarTrio, CursorGlow, DoodleField, RobotMascot } from './components/CreativeVisuals'
 import { fetchModels, streamCompletion } from './lib/provider'
 import { downloadJson, loadState, saveState } from './lib/storage'
 import { chatPath, readRoute } from './lib/routes'
+import { normalizeGrade, normalizeQuiz, parseQuizJson } from './lib/quiz'
 
 const id = () => crypto.randomUUID()
 const blankProvider = { name: 'Custom Provider', baseUrl: '', apiKey: '', model: '', contextWindow: 128000, instructions: '', headersText: '' }
@@ -42,6 +45,8 @@ const migrateInterfaceText = (items) => items.map((conversation) => ({
   })),
 }))
 const NATURAL_STYLE_PROMPT = `Respond naturally and directly in the user's language. Avoid unnecessary introductions, praise, repeating the question, redundant conclusions, excessive headings or lists, overusing bold text, clichéd AI-assistant phrases, and em or en dashes. Use simple sentences and punctuation. When the user requests code or a specific format, prioritize format accuracy.`
+const QUIZ_SCHEMA = `Return only one valid JSON object with this shape: {"title":"string","description":"string","instructions":"string","questions":[{"id":"unique string","prompt":"string","responseMode":"single_choice|multiple_choice|short_text|long_text|boolean|number","options":["string"],"helperText":"string","points":1}]}. Match the requested format instead of forcing a fixed test type. Use options only for choice questions. Never include answers, solutions, hints that reveal answers, Markdown fences, or text outside JSON.`
+const GRADE_SCHEMA = `Return only one valid JSON object with this shape: {"score":1,"grade":"A+|A|A-|B+|B|B-|C+|C|C-|D+|D|D-|F","summary":"concise final assessment","review":"overall review of strengths and weaknesses","advice":"specific next study steps","feedback":[{"questionId":"matching id","correct":true,"note":"concise feedback"}]}. Include one feedback item for every question. Score must be an integer from 1 through 100. Evaluate the submitted answers against the quiz subject using your own knowledge. Do not ask follow-up questions and do not include text outside JSON.`
 const GRAMMAR_ASSIST_PROMPT = `If the user's latest message is written in English and contains clear grammatical errors, begin the response with exactly this short Markdown info section:
 > **Grammar note**
 > **Correction:** [a natural, grammatically correct version of the user's sentence]
@@ -72,6 +77,9 @@ export default function App() {
   const [providers, setProviders] = useState(stored?.providers?.length ? stored.providers : [blankProvider])
   const [activeProvider, setActiveProvider] = useState(stored?.activeProvider || 0)
   const [models, setModels] = useState(stored?.models || [])
+  const [quizCategories, setQuizCategories] = useState(stored?.quizCategories?.length ? stored.quizCategories : [{ id: 'general-quiz', name: 'General' }])
+  const [savedQuizzes, setSavedQuizzes] = useState(stored?.savedQuizzes || [])
+  const [quizAttempts, setQuizAttempts] = useState(stored?.quizAttempts || [])
   const [workspaces, setWorkspaces] = useState(stored?.workspaces?.length ? stored.workspaces : [{ id: 'default', name: 'General', color: 'white', instructions: '' }])
   const initialWorkspaceId = stored?.workspaces?.[0]?.id || 'default'
   const [conversations, setConversations] = useState(() => {
@@ -81,7 +89,7 @@ export default function App() {
   const initialRoute = useMemo(() => readRoute(), [])
   const initialRouteChat = conversations.find((chat) => chat.id === initialRoute.chatId)
   const initialActiveId = initialRouteChat?.id || stored?.activeId || conversations[0].id
-  const [route, setRoute] = useState(initialRouteChat ? initialRoute : { page: 'home', chatId: null })
+  const [route, setRoute] = useState(initialRoute.page === 'quiz' || initialRouteChat ? initialRoute : { page: 'home', chatId: null })
   const [activeId, setActiveId] = useState(initialActiveId)
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => conversations.find((chat) => chat.id === initialActiveId)?.workspaceId || initialWorkspaceId)
   const [workspaceDialog, setWorkspaceDialog] = useState({ open: false, workspace: null })
@@ -92,6 +100,7 @@ export default function App() {
   const [input, setInput] = useState('')
   const [followUpQuote, setFollowUpQuote] = useState('')
   const [status, setStatus] = useState({ loading: false, ok: false, message: '' })
+  const [storageError, setStorageError] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [autoFollow, setAutoFollow] = useState(true)
   const [temperature, setTemperature] = useState(stored?.temperature ?? 0.7)
@@ -122,7 +131,7 @@ export default function App() {
 
   useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); document.documentElement.style.colorScheme = theme }, [theme])
   useEffect(() => { document.body.style.overflow = settingsOpen || quickAskSelection ? 'hidden' : ''; return () => { document.body.style.overflow = '' } }, [settingsOpen, quickAskSelection])
-  useEffect(() => { const timer = setTimeout(() => saveState({ theme, providers, activeProvider, models, workspaces, conversations, activeId, activeWorkspaceId, temperature, wideChat, sidebarWidth, sidebarVisible }), 300); return () => clearTimeout(timer) }, [theme, providers, activeProvider, models, workspaces, conversations, activeId, activeWorkspaceId, temperature, wideChat, sidebarWidth, sidebarVisible])
+  useEffect(() => { const timer = setTimeout(() => setStorageError(!saveState({ theme, providers, activeProvider, models, quizCategories, savedQuizzes, quizAttempts, workspaces, conversations, activeId, activeWorkspaceId, temperature, wideChat, sidebarWidth, sidebarVisible })), 300); return () => clearTimeout(timer) }, [theme, providers, activeProvider, models, quizCategories, savedQuizzes, quizAttempts, workspaces, conversations, activeId, activeWorkspaceId, temperature, wideChat, sidebarWidth, sidebarVisible])
   useEffect(() => { if (autoFollow && messages.length) virtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: streaming ? 'auto' : 'smooth' }) }, [messages.length, latestContent, autoFollow, streaming, virtualizer])
   useEffect(() => { virtualizer.measure() }, [wideChat, virtualizer])
   useEffect(() => {
@@ -136,8 +145,9 @@ export default function App() {
         setRoute(nextRoute)
         setActiveId(nextChat.id)
         setActiveWorkspaceId(nextChat.workspaceId)
+      } else if (nextRoute.page === 'quiz') {
+        setRoute(nextRoute)
       } else {
-        if (nextRoute.page !== 'home') window.history.replaceState({}, '', '/')
         setRoute({ page: 'home', chatId: null })
       }
       setSidebarOpen(false)
@@ -145,7 +155,7 @@ export default function App() {
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [conversations])
-  useEffect(() => { document.title = route.page === 'chat' ? `${activeConversation?.title || 'Chat'} · Chatty` : 'Chatty · Home' }, [route.page, activeConversation?.title])
+  useEffect(() => { document.title = route.page === 'chat' ? `${activeConversation?.title || 'Chat'} · Chatty` : route.page === 'quiz' ? 'Quiz · Chatty' : 'Chatty · Home' }, [route.page, activeConversation?.title])
 
   const startSidebarResize = (event) => {
     if (window.matchMedia('(max-width: 767px)').matches) return
@@ -172,6 +182,7 @@ export default function App() {
 
   const updateConversation = useCallback((updater) => setConversations((all) => all.map((conversation) => conversation.id === activeId ? updater(conversation) : conversation)), [activeId])
   const navigateHome = () => { window.history.pushState({}, '', '/'); setRoute({ page: 'home', chatId: null }); setSidebarOpen(false) }
+  const navigateQuiz = () => { window.history.pushState({}, '', '/quiz'); setRoute({ page: 'quiz', chatId: null }); setSidebarOpen(false) }
   const openChat = (chat, replace = false) => {
     window.history[replace ? 'replaceState' : 'pushState']({}, '', chatPath(chat.id))
     setRoute({ page: 'chat', chatId: chat.id })
@@ -187,7 +198,6 @@ export default function App() {
     } else {
       const workspace = { id: id(), ...values }
       setWorkspaces((all) => [...all, workspace])
-      newChat(workspace.id)
     }
     setWorkspaceDialog({ open: false, workspace: null })
   }
@@ -260,6 +270,20 @@ export default function App() {
       onToken,
     })
   }
+  const completeJson = async (messages, maxTokens = OUTPUT_RESERVE) => {
+    if (!provider.baseUrl || !provider.model) throw new Error('Connect a provider and select a model first.')
+    let output = ''
+    await streamCompletion({ provider: normalizeProvider(provider), model: provider.model, messages, settings: { temperature: 0.2, maxTokens }, onToken: (token) => { output += token } })
+    return parseQuizJson(output)
+  }
+  const generateQuiz = async ({ description, instructions }) => normalizeQuiz(await completeJson([
+    { role: 'system', content: QUIZ_SCHEMA },
+    { role: 'user', content: `Create this quiz.\n\nDescription:\n${description}\n\nUser instructions:\n${instructions || 'Choose an appropriate interactive format.'}` },
+  ]), description)
+  const gradeQuiz = async (quiz, answers) => normalizeGrade(await completeJson([
+    { role: 'system', content: GRADE_SCHEMA },
+    { role: 'user', content: `Grade this completed quiz once and make the result final.\n\nQuiz:\n${JSON.stringify(quiz)}\n\nSubmitted answers:\n${JSON.stringify(answers)}` },
+  ]))
   const providerOptions = providers.map((item, index) => `${item.name} · ${index + 1}`)
   const changeProvider = (option) => { const index = providerOptions.indexOf(option); if (index >= 0) { setActiveProvider(index); setModels([]); setStatus({ loading: false, ok: false, message: '' }) } }
 
@@ -277,34 +301,21 @@ export default function App() {
       <nav className="mt-2 flex-1 space-y-3 overflow-y-auto">{workspaces.map((workspace) => {
         const workspaceChats = conversations.filter((chat) => chat.workspaceId === workspace.id)
         return <section key={workspace.id} aria-label={workspace.name}>
-          <div className={`flex h-9 items-center gap-1 rounded-lg px-1.5 ${workspace.id === activeWorkspace?.id ? 'bg-slate-100 dark:bg-white/5' : ''}`}><span className={`h-3 w-3 shrink-0 rounded-md border border-slate-200 ${workspace.color === 'purple' ? 'bg-purple-200 dark:border-purple-700 dark:bg-purple-800' : workspace.color === 'blue' ? 'bg-blue-200 dark:border-blue-700 dark:bg-blue-800' : workspace.color === 'teal' ? 'bg-teal-200 dark:border-teal-700 dark:bg-teal-800' : 'bg-white dark:border-slate-600 dark:bg-slate-800'}`} /><span className="min-w-0 flex-1 truncate text-sm font-semibold">{workspace.name}</span><button onClick={() => newChat(workspace.id)} aria-label={`New chat in ${workspace.name}`} title="New chat" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><Plus size={15} /></button><button onClick={() => setWorkspaceDialog({ open: true, workspace })} aria-label={`Edit ${workspace.name}`} title="Workspace settings" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><GearSix size={15} /></button></div>
-          <div className="mt-1 space-y-0.5">{workspaceChats.map((chat) => <div key={chat.id} className={`group flex items-center rounded-lg transition-colors duration-300 ease-out ${route.page === 'chat' && chat.id === activeId ? 'bg-purple-100 text-purple-900 dark:bg-purple-500/15 dark:text-purple-100' : 'hover:bg-purple-50 dark:hover:bg-white/5'}`}><button onClick={() => selectChat(chat)} className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-4 pr-2 text-left"><ChatCircle size={16} className="shrink-0" /><span className="truncate text-sm">{chat.title}</span></button><button aria-label={`Delete ${chat.title}`} onClick={() => deleteChat(chat.id)} className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-colors duration-300 ease-out hover:bg-slate-200 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-slate-700"><Trash size={15} /></button></div>)}{!workspaceChats.length && <button onClick={() => newChat(workspace.id)} className="ml-4 flex h-8 items-center gap-2 rounded-lg px-2 text-xs text-slate-400 transition-colors duration-300 ease-out hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-white/5 dark:hover:text-purple-300"><Plus size={14} />Start a chat</button>}</div>
+          <div className={`flex h-9 items-center gap-1 rounded-lg px-1.5 ${workspace.id === activeWorkspace?.id ? 'bg-slate-100 dark:bg-white/5' : ''}`}><span className={`h-3 w-3 shrink-0 rounded-md border border-slate-200 ${workspace.color === 'purple' ? 'bg-purple-200 dark:border-purple-700 dark:bg-purple-800' : workspace.color === 'blue' ? 'bg-blue-200 dark:border-blue-700 dark:bg-blue-800' : workspace.color === 'teal' ? 'bg-teal-200 dark:border-teal-700 dark:bg-teal-800' : 'bg-white dark:border-slate-600 dark:bg-slate-800'}`} /><span className="min-w-0 flex-1 truncate text-sm font-semibold">{workspace.name}</span><button onClick={() => setWorkspaceDialog({ open: true, workspace })} aria-label={`Edit ${workspace.name}`} title="Workspace settings" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><GearSix size={15} /></button></div>
+          <div className="mt-1 space-y-0.5">{workspaceChats.map((chat) => <div key={chat.id} className={`group flex items-center rounded-lg transition-colors duration-300 ease-out ${route.page === 'chat' && chat.id === activeId ? 'bg-purple-100 text-purple-900 dark:bg-purple-500/15 dark:text-purple-100' : 'hover:bg-purple-50 dark:hover:bg-white/5'}`}><button onClick={() => selectChat(chat)} className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-4 pr-2 text-left"><ChatCircle size={16} className="shrink-0" /><span className="truncate text-sm">{chat.title}</span></button><button aria-label={`Delete ${chat.title}`} onClick={() => deleteChat(chat.id)} className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-colors duration-300 ease-out hover:bg-slate-200 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-slate-700"><Trash size={15} /></button></div>)}{!workspaceChats.length && <p className="ml-4 px-2 py-2 text-xs text-slate-400">No conversations</p>}</div>
         </section>
       })}</nav>
       <div className="relative mb-2 flex items-end justify-center gap-1"><RobotMascot compact className="animate-[bounce_5s_ease-in-out_infinite] motion-reduce:animate-none" /><AvatarTrio /></div>
-      <div className="relative space-y-1 border-t border-purple-100 pt-2 dark:border-white/5"><button onClick={() => downloadJson({ workspaces, conversations }, 'chatty-export.json')} className={`${button} w-full justify-start gap-2 px-2`}><DownloadSimple size={17} />Export chats</button><button onClick={() => setSettingsOpen(true)} className={`${button} w-full justify-start gap-2 px-2`}><GearSix size={17} />Provider & model</button></div>
+      <div className="relative space-y-1 border-t border-purple-100 pt-2 dark:border-white/5"><button onClick={() => downloadJson({ workspaces, conversations, quizCategories, savedQuizzes, quizAttempts }, 'chatty-export.json')} className={`${button} w-full justify-start gap-2 px-2`}><DownloadSimple size={17} />Export chats</button><button onClick={() => setSettingsOpen(true)} className={`${button} w-full justify-start gap-2 px-2`}><GearSix size={17} />Provider & model</button></div>
     </aside>
 
     <main className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-colors duration-500 ${workspaceBackgrounds[activeWorkspace?.color] || workspaceBackgrounds.white}`}>
+      {storageError && <div role="alert" className="relative z-30 bg-purple-100 px-3 py-2 text-center text-xs font-medium text-purple-900 dark:bg-purple-500/20 dark:text-purple-100">Browser storage is unavailable or full. Recent changes may not persist after reload.</div>}
       <div aria-hidden="true" className="pointer-events-none absolute -right-24 top-20 h-72 w-72 animate-pulse rounded-full bg-purple-300/20 blur-3xl motion-reduce:animate-none dark:bg-purple-700/10" />
       <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation" className={`${button} absolute left-3 top-3 z-20 w-9 bg-white/80 backdrop-blur-md md:hidden dark:bg-slate-900/80`}><List size={18} /></button>
       {!sidebarVisible && <button onClick={() => setSidebarVisible(true)} aria-label="Show sidebar" title="Show sidebar" className={`${button} absolute left-3 top-3 z-20 hidden w-9 bg-white/80 shadow-[0_8px_24px_rgba(15,23,42,0.14)] backdrop-blur-md md:flex dark:bg-slate-900/80 dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]`}><List size={18} /></button>}
 
-      {route.page === 'home' ? <div className="relative flex min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-5">
-        <div className="mx-auto flex w-full max-w-5xl flex-col justify-center space-y-4">
-          <section className="relative overflow-hidden rounded-xl bg-white p-4 shadow-[0_14px_42px_rgba(76,29,149,0.14)] dark:bg-slate-900 dark:shadow-[0_16px_46px_rgba(0,0,0,0.38)]">
-            <div aria-hidden="true" className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-purple-200/60 blur-3xl dark:bg-purple-600/15" />
-            <div className="relative grid items-center gap-4 md:grid-cols-[1fr_auto]">
-              <div><span className="inline-flex rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-500/15 dark:text-purple-300">Your AI workspace</span><h1 className="mt-2 text-2xl leading-7 font-semibold tracking-tight text-slate-950 dark:text-white">Welcome back to Chatty</h1><p className="mt-1 max-w-xl text-sm leading-5 text-slate-500 dark:text-slate-400">Continue an idea or start a focused conversation. Every chat now has its own link, so you can bookmark it and return anytime.</p><button onClick={() => newChat()} className="mt-3 flex h-10 items-center gap-2 rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 px-3 text-sm font-medium text-white shadow-[0_10px_26px_rgba(126,34,206,0.24)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_14px_30px_rgba(126,34,206,0.3)] active:scale-[0.97] motion-reduce:transform-none"><Plus size={17} />Start a new chat</button></div>
-              <RobotMascot className="hidden md:block" />
-            </div>
-          </section>
-          <section aria-labelledby="recent-chats-title" className="rounded-xl bg-white p-4 shadow-[0_10px_32px_rgba(76,29,149,0.11)] dark:bg-slate-900 dark:shadow-[0_14px_38px_rgba(0,0,0,0.32)]">
-            <div className="flex items-end justify-between gap-3"><div><h2 id="recent-chats-title" className="text-base leading-6 font-semibold">Recent chats</h2><p className="mt-0.5 text-xs leading-4 text-slate-500 dark:text-slate-400">Open a conversation from its dedicated page.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{conversations.length} total</span></div>
-            <div className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">{[...conversations].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6).map((chat) => { const workspace = workspaces.find((item) => item.id === chat.workspaceId); return <button key={chat.id} onClick={() => selectChat(chat)} className="group flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-300 ease-out hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-purple-500/10"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"><ChatCircle size={17} /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">{chat.title}</span><span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">{workspace?.name || 'General'} · {chat.messages.length} messages</span></span><ArrowRight size={16} className="shrink-0 text-slate-400 transition-transform duration-300 ease-out group-hover:translate-x-0.5 group-hover:text-purple-600 motion-reduce:transform-none dark:group-hover:text-purple-300" /></button> })}</div>
-          </section>
-        </div>
-      </div> : <>
+      {route.page === 'quiz' ? <QuizPage providerReady={Boolean(provider.baseUrl && provider.model)} categories={quizCategories} quizzes={savedQuizzes} attempts={quizAttempts} onAddCategory={(category) => setQuizCategories((all) => [...all, category])} onSaveQuiz={(quiz) => setSavedQuizzes((all) => [quiz, ...all])} onSaveAttempt={(attempt) => setQuizAttempts((all) => [attempt, ...all])} onOpenSettings={() => setSettingsOpen(true)} onGenerate={generateQuiz} onGrade={gradeQuiz} /> : route.page === 'home' ? <HomePortal workspaces={workspaces} conversations={conversations} onOpenChat={selectChat} onNewChat={newChat} onOpenQuiz={navigateQuiz} /> : <>
       {assistantMessages.length > 1 && <><span aria-hidden="true" className="pointer-events-none absolute left-1 top-1/2 z-10 h-14 w-1 -translate-y-1/2 rounded-full bg-purple-400/70 shadow-[0_0_12px_rgba(168,85,247,0.35)] sm:left-2 dark:bg-purple-400/60" /><nav aria-label="AI response navigator" className="absolute left-1 top-1/2 z-20 flex max-h-[min(64vh,420px)] w-8 -translate-y-1/2 flex-col overflow-x-hidden overflow-y-auto rounded-xl bg-white/90 p-1.5 opacity-0 shadow-[0_10px_28px_rgba(76,29,149,0.16)] backdrop-blur-md transition-opacity duration-300 ease-out hover:w-32 hover:opacity-100 focus-within:w-32 focus-within:opacity-100 dark:bg-slate-900/90 dark:shadow-[0_12px_32px_rgba(0,0,0,0.35)] sm:left-2 sm:hover:w-44 sm:focus-within:w-44">
         <span aria-hidden="true" className="absolute bottom-4 left-[17px] top-4 w-px bg-gradient-to-b from-purple-200 via-purple-400 to-purple-200 dark:from-purple-500/20 dark:via-purple-400 dark:to-purple-500/20" />
         {assistantMessages.map(({ message, index }, responseIndex) => {
@@ -331,6 +342,6 @@ export default function App() {
     <WorkspaceDialog open={workspaceDialog.open} workspace={workspaceDialog.workspace} onClose={() => setWorkspaceDialog({ open: false, workspace: null })} onSave={saveWorkspace} />
     <SelectionToolbar selection={selectionAction} onFollowUp={(text) => applySelection(text, false)} onAsk={(text) => applySelection(text, true)} onClose={() => setSelectionAction(null)} />
     <QuickAskPopup selection={quickAskSelection} providerReady={Boolean(provider.baseUrl && provider.model)} onAsk={quickAsk} onClose={() => setQuickAskSelection('')} onOpenSettings={() => setSettingsOpen(true)} />
-    <SettingsPanel open={settingsOpen} provider={provider} providers={providerOptions} activeProvider={providerOptions[activeProvider]} models={models} status={status} theme={theme} onThemeChange={setTheme} onProviderChange={changeProvider} onChange={updateProvider} onAdd={() => { setProviders((all) => [...all, { ...blankProvider, name: `Provider ${all.length + 1}` }]); setActiveProvider(providers.length); setModels([]); setStatus({ loading: false, ok: false, message: '' }) }} onClose={() => setSettingsOpen(false)} onLoadModels={loadModels} onSave={() => { try { if (provider.headersText) JSON.parse(provider.headersText); saveState({ theme, providers, activeProvider, models, workspaces, conversations, activeId, activeWorkspaceId, temperature, wideChat, sidebarWidth, sidebarVisible }); setStatus({ loading: false, ok: true, message: 'Provider saved in this browser.' }) } catch { setStatus({ loading: false, ok: false, message: 'Additional headers must be valid JSON.' }) } }} onDelete={() => { setProviders([blankProvider]); setActiveProvider(0); setModels([]); setStatus({ loading: false, ok: true, message: 'Provider configuration reset.' }) }} />
+    <SettingsPanel open={settingsOpen} provider={provider} providers={providerOptions} activeProvider={providerOptions[activeProvider]} models={models} status={status} theme={theme} onThemeChange={setTheme} onProviderChange={changeProvider} onChange={updateProvider} onAdd={() => { setProviders((all) => [...all, { ...blankProvider, name: `Provider ${all.length + 1}` }]); setActiveProvider(providers.length); setModels([]); setStatus({ loading: false, ok: false, message: '' }) }} onClose={() => setSettingsOpen(false)} onLoadModels={loadModels} onSave={() => { try { if (provider.headersText) JSON.parse(provider.headersText); saveState({ theme, providers, activeProvider, models, quizCategories, savedQuizzes, quizAttempts, workspaces, conversations, activeId, activeWorkspaceId, temperature, wideChat, sidebarWidth, sidebarVisible }); setStatus({ loading: false, ok: true, message: 'Provider saved in this browser.' }) } catch { setStatus({ loading: false, ok: false, message: 'Additional headers must be valid JSON.' }) } }} onDelete={() => { setProviders([blankProvider]); setActiveProvider(0); setModels([]); setStatus({ loading: false, ok: true, message: 'Provider configuration reset.' }) }} />
   </div>
 }
