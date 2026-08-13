@@ -2,6 +2,8 @@ const CHAT_PREFIX = '/chat/'
 const WORKSPACE_PREFIX = '/workspace/'
 const WORKSPACES_PATH = '/workspaces'
 const QUIZ_PREFIX = '/quiz'
+const VOCABULARY_PATH = '/vocabulary'
+const VOCABULARY_PREFIX = '/vocabulary/'
 
 const decodeSegment = (value) => {
   try { return decodeURIComponent(value) } catch { return '' }
@@ -12,6 +14,14 @@ export function readRoute(pathname = window.location.pathname) {
   if (normalized === '/') return { page: 'home', chatId: null }
   if (normalized === WORKSPACES_PATH) return { page: 'workspaces' }
   if (normalized === QUIZ_PREFIX) return { page: 'quiz', quizView: 'categories' }
+  if (normalized === VOCABULARY_PATH) return { page: 'vocabulary' }
+  if (normalized.startsWith(VOCABULARY_PREFIX)) {
+    const encodedId = normalized.slice(VOCABULARY_PREFIX.length)
+    if (encodedId && !encodedId.includes('/')) {
+      const languageId = decodeSegment(encodedId)
+      if (languageId) return { page: 'vocabulary-language', languageId }
+    }
+  }
 
   const segments = normalized.split('/').filter(Boolean)
   if (segments[0] === 'quiz') {
@@ -64,6 +74,8 @@ export function workspacePath(workspaceId) {
 }
 
 export const workspacesPath = WORKSPACES_PATH
+export const vocabularyPath = VOCABULARY_PATH
+export const vocabularyLanguagePath = (languageId) => `${VOCABULARY_PREFIX}${encodeURIComponent(languageId)}`
 
 export const quizPaths = {
   categories: QUIZ_PREFIX,
