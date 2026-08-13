@@ -102,6 +102,27 @@ export default function QuickAskPopup({ selection, providerReady, onAsk, onClose
     }
   }
 
+  const retry = async () => {
+    if (!currentQuestion || loading || !providerReady) return
+    const controller = new AbortController()
+    abortRef.current = controller
+    setAnswer('')
+    setError('')
+    setLoading(true)
+    try {
+      await onAsk(currentQuestion, (token) => {
+        if (abortRef.current === controller) setAnswer((current) => current + token)
+      }, controller.signal, turns)
+    } catch (requestError) {
+      if (requestError.name !== 'AbortError' && abortRef.current === controller) setError(requestError.message)
+    } finally {
+      if (abortRef.current === controller) {
+        setLoading(false)
+        abortRef.current = null
+      }
+    }
+  }
+
   const stop = () => abortRef.current?.abort()
   const reset = () => {
     if (currentQuestion) setTurns((current) => [...current, { question: currentQuestion, answer, error }])
@@ -113,7 +134,7 @@ export default function QuickAskPopup({ selection, providerReady, onAsk, onClose
   }
 
   return <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/35 p-3 backdrop-blur-sm sm:items-center" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePopup() }}>
-    <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="quick-ask-title" className="flex max-h-[min(82dvh,640px)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-[0_20px_55px_rgba(15,23,42,0.24)] dark:bg-slate-900 dark:shadow-[0_20px_55px_rgba(0,0,0,0.48)]">
+    <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="quick-ask-title" className="flex max-h-[min(90dvh,820px)] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-[0_20px_55px_rgba(15,23,42,0.24)] dark:bg-slate-900 dark:shadow-[0_20px_55px_rgba(0,0,0,0.48)]">
       <header className="flex h-14 shrink-0 items-center gap-2 px-4">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"><ChatCircleDots size={17} /></span>
         <div className="min-w-0 flex-1"><h2 id="quick-ask-title" className="text-base leading-6 font-semibold">Quick ask</h2><p className="text-xs leading-4 text-slate-500 dark:text-slate-400">Temporary response, not saved to chat history</p></div>
@@ -132,8 +153,8 @@ export default function QuickAskPopup({ selection, providerReady, onAsk, onClose
         {(currentQuestion || answer || error || loading) && <div aria-live="polite" className="rounded-xl bg-slate-50 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.10)] dark:bg-slate-950 dark:shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
           {currentQuestion && <div className="mb-3 ml-auto w-fit max-w-[90%] whitespace-pre-wrap rounded-lg bg-purple-700 px-3 py-2 text-sm leading-5 text-white">{currentQuestion}</div>}
           <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[13px] leading-[18px] font-medium text-purple-700 dark:text-purple-300">ShinkuChat</span>{!loading && <button type="button" onClick={reset} className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-slate-500 transition-colors duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:hover:bg-purple-500/15 dark:hover:text-purple-300"><ArrowClockwise size={14} />Ask another</button>}</div>
-          {answer && <div className="max-w-none break-words text-sm leading-5 text-slate-700 dark:text-slate-200 [&_p]:my-0 [&_p+p]:mt-3 [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_strong]:font-semibold [&_em]:italic [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-purple-300 [&_blockquote]:pl-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-slate-950 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-slate-100 [&_code]:font-mono [&_code]:text-[13px] [&_p_code]:rounded [&_p_code]:bg-slate-200 [&_p_code]:px-1 dark:[&_p_code]:bg-slate-800 [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:text-left [&_table]:text-sm [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-3 [&_th]:py-2 dark:[&_th]:border-slate-700 dark:[&_th]:bg-slate-800 [&_td]:border [&_td]:border-slate-200 [&_td]:px-3 [&_td]:py-2 dark:[&_td]:border-slate-700 [&_a]:text-purple-600 [&_a]:underline dark:[&_a]:text-purple-300" dangerouslySetInnerHTML={{ __html: renderMarkdown(answer) }} />}
-          {error && <p className="text-sm leading-5 text-slate-600 dark:text-slate-300">Could not complete the quick ask: {error}</p>}
+          {answer && <div className="max-w-none break-words text-sm leading-5 text-slate-700 dark:text-slate-200 [&_p]:my-0 [&_p+p]:mt-3 [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_strong]:font-semibold [&_em]:italic [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-purple-300 [&_blockquote]:pl-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-slate-950 [&_pre]:p-3 [&_pre]:font-mono [&_pre]:text-slate-100 [&_code]:font-mono [&_code]:text-[13px] [&_p_code]:rounded-md [&_p_code]:bg-slate-200 [&_p_code]:px-1.5 [&_p_code]:py-0.5 [&_li_code]:rounded-md [&_li_code]:bg-purple-100 [&_li_code]:px-1.5 [&_li_code]:py-0.5 [&_li_code]:text-purple-800 dark:[&_p_code]:bg-slate-800 dark:[&_li_code]:bg-purple-500/15 dark:[&_li_code]:text-purple-200 [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:text-left [&_table]:text-sm [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-3 [&_th]:py-2 dark:[&_th]:border-slate-700 dark:[&_th]:bg-slate-800 [&_td]:border [&_td]:border-slate-200 [&_td]:px-3 [&_td]:py-2 dark:[&_td]:border-slate-700 [&_a]:text-purple-600 [&_a]:underline dark:[&_a]:text-purple-300" dangerouslySetInnerHTML={{ __html: renderMarkdown(answer) }} />}
+          {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-purple-100 px-3 py-2 text-sm leading-5 text-slate-700 dark:bg-purple-500/15 dark:text-slate-200"><span>Could not complete the quick ask: {error}</span><button type="button" onClick={retry} disabled={!providerReady} className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-purple-700 px-3 text-sm font-medium text-white transition-colors duration-300 ease-out hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40"><ArrowClockwise size={15} />Retry</button></div>}
           {loading && !answer && <span className="inline-flex gap-1" aria-label="Generating response"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 motion-reduce:animate-none" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 [animation-delay:150ms] motion-reduce:animate-none" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 [animation-delay:300ms] motion-reduce:animate-none" /></span>}
         </div>}
       </div>
