@@ -104,11 +104,12 @@ const Message = memo(function Message({ message, wide = false, streaming, onRetr
       const text = selection?.toString().trim()
       if (!text || !articleRef.current?.contains(selection.anchorNode)) { onSelectionAction(null); return }
       const rect = selection.getRangeAt(0).getBoundingClientRect()
-      onSelectionAction({ text, x: Math.min(window.innerWidth - 170, Math.max(8, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
+      const halfToolbar = Math.min(180, window.innerWidth / 2 - 8)
+      onSelectionAction({ text, chatActions: true, x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
     })
   }
 
-  return <article ref={articleRef} onClick={handleClick} onMouseUp={handleSelection} onKeyUp={handleSelection} className={`mx-auto flex w-full ${wide ? 'max-w-5xl' : 'max-w-3xl'} scroll-mt-3 gap-3 px-3 py-3 [content-visibility:auto] [contain-intrinsic-size:auto_120px] sm:px-4 ${assistant ? 'justify-start' : 'justify-end'}`}>
+  return <article ref={articleRef} data-message-role={message.role} onClick={handleClick} onMouseUp={handleSelection} onKeyUp={handleSelection} className={`mx-auto flex w-full ${wide ? 'max-w-5xl' : 'max-w-3xl'} scroll-mt-3 gap-3 px-3 py-3 [content-visibility:auto] [contain-intrinsic-size:auto_120px] sm:px-4 ${assistant ? 'justify-start' : 'justify-end'}`}>
     {assistant && <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-700 to-purple-500 text-white shadow-[0_8px_18px_rgba(126,34,206,0.22)]"><Robot size={17} weight="fill" /><span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-purple-200 ring-2 ring-white motion-reduce:animate-none dark:ring-slate-950" /></div>}
     <div className={`min-w-0 ${assistant ? 'max-w-[calc(100%-44px)] flex-1' : 'max-w-[86%] sm:max-w-[76%]'}`}>
       {assistant && <div className="mb-1 flex min-h-7 items-center justify-between gap-2"><span className="text-sm font-medium text-slate-800 dark:text-slate-100">ShinkuChat</span><button onClick={copy} aria-label="Copy response" className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/10">{copied ? <Check size={16} /> : <Copy size={16} />}</button></div>}

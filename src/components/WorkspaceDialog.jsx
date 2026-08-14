@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Palette, SlidersHorizontal, X } from '@phosphor-icons/react'
+import { Check, Palette, SlidersHorizontal, Trash, X } from '@phosphor-icons/react'
 
 const COLORS = [
   { id: 'white', label: 'Clean', swatch: 'bg-white dark:bg-slate-900' },
@@ -8,7 +8,7 @@ const COLORS = [
   { id: 'teal', label: 'Lagoon', swatch: 'bg-teal-100 dark:bg-teal-950' },
 ]
 
-export default function WorkspaceDialog({ open, workspace, onClose, onSave }) {
+export default function WorkspaceDialog({ open, workspace, onClose, onSave, onDelete, canDelete = true }) {
   const [name, setName] = useState('')
   const [color, setColor] = useState('white')
   const [instructions, setInstructions] = useState('')
@@ -53,7 +53,7 @@ export default function WorkspaceDialog({ open, workspace, onClose, onSave }) {
         <label className="block"><span className="text-[13px] leading-[18px] font-medium">Additional instructions</span><textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} maxLength={2000} placeholder="Applied to every chat in this workspace…" className="mt-1 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-5 outline-none transition-colors duration-300 ease-out placeholder:text-slate-400 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/10 dark:border-slate-700 dark:bg-slate-950 dark:focus:border-purple-500" /><span className="mt-0.5 block text-xs leading-4 text-slate-400">These instructions are added to the system prompt.</span></label>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={onClose} className="h-9 rounded-lg px-3 text-sm font-medium text-slate-600 transition-colors duration-300 ease-out hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button><button type="submit" disabled={!name.trim()} className="h-9 rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 px-3 text-sm font-medium text-white shadow-[0_8px_20px_rgba(126,34,206,0.22)] transition-opacity duration-300 ease-out disabled:cursor-not-allowed disabled:opacity-40">{workspace ? 'Save changes' : 'Create workspace'}</button></div>
+      <div className="mt-4 flex items-center gap-2">{workspace && <button type="button" disabled={!canDelete} title={!canDelete ? 'The last workspace cannot be deleted' : undefined} onClick={() => onDelete(workspace.id)} className="flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-purple-700 transition-colors duration-300 ease-out hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300 dark:hover:bg-purple-500/10"><Trash size={16} />Delete</button>}<div className="ml-auto flex gap-2"><button type="button" onClick={onClose} className="h-9 rounded-lg px-3 text-sm font-medium text-slate-600 transition-colors duration-300 ease-out hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button><button type="submit" disabled={!name.trim()} className="h-9 rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 px-3 text-sm font-medium text-white shadow-[0_8px_20px_rgba(126,34,206,0.22)] transition-opacity duration-300 ease-out disabled:cursor-not-allowed disabled:opacity-40">{workspace ? 'Save changes' : 'Create workspace'}</button></div></div>
     </form>
   </div>
 }

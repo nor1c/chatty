@@ -16,11 +16,10 @@ export function readRoute(pathname = window.location.pathname) {
   if (normalized === QUIZ_PREFIX) return { page: 'quiz', quizView: 'categories' }
   if (normalized === VOCABULARY_PATH) return { page: 'vocabulary' }
   if (normalized.startsWith(VOCABULARY_PREFIX)) {
-    const encodedId = normalized.slice(VOCABULARY_PREFIX.length)
-    if (encodedId && !encodedId.includes('/')) {
-      const languageId = decodeSegment(encodedId)
-      if (languageId) return { page: 'vocabulary-language', languageId }
-    }
+    const vocabularySegments = normalized.slice(VOCABULARY_PREFIX.length).split('/')
+    const languageId = decodeSegment(vocabularySegments[0])
+    if (languageId && vocabularySegments.length === 2 && vocabularySegments[1] === 'practice') return { page: 'vocabulary-practice', languageId }
+    if (languageId && vocabularySegments.length === 1) return { page: 'vocabulary-language', languageId }
   }
 
   const segments = normalized.split('/').filter(Boolean)
@@ -76,6 +75,7 @@ export function workspacePath(workspaceId) {
 export const workspacesPath = WORKSPACES_PATH
 export const vocabularyPath = VOCABULARY_PATH
 export const vocabularyLanguagePath = (languageId) => `${VOCABULARY_PREFIX}${encodeURIComponent(languageId)}`
+export const vocabularyPracticePath = (languageId) => `${vocabularyLanguagePath(languageId)}/practice`
 
 export const quizPaths = {
   categories: QUIZ_PREFIX,
