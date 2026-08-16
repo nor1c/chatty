@@ -47,7 +47,7 @@ export function speakWord({ text, languageCode, voiceURI, rate = 1, onStart, onE
   const voices = synthesis.getVoices()
   const available = matchingVoices(voices, languageCode)
   utterance.lang = pronunciationLocale(languageCode)
-  utterance.rate = Math.min(1.5, Math.max(0.5, Number(rate) || 1))
+  utterance.rate = Math.min(2, Math.max(0.5, Number(rate) || 1))
   utterance.voice = voices.find((voice) => voice.voiceURI === voiceURI) || available[0] || null
   utterance.onstart = onStart
   utterance.onend = onEnd

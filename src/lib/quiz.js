@@ -1,12 +1,57 @@
 const stripFence = (value) => value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
 
-export function parseQuizJson(value) {
-  const cleaned = stripFence(value)
+function extractJsonObject(value) {
+  const cleaned = stripFence(String(value || ''))
   const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start < 0 || end <= start) throw new Error('The model did not return valid quiz data.')
-  try { return JSON.parse(cleaned.slice(start, end + 1)) } catch { throw new Error('The model returned malformed quiz data. Please try generating it again.') }
+  if (start < 0) return ''
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = start; index < cleaned.length; index += 1) {
+    const character = cleaned[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') inString = true
+    else if (character === '{') depth += 1
+    else if (character === '}' && --depth === 0) return cleaned.slice(start, index + 1)
+  }
+  return cleaned.slice(start)
 }
+
+function escapeControlCharacters(value) {
+  let result = ''
+  let inString = false
+  let escaped = false
+  for (const character of value) {
+    if (inString && !escaped && (character === '\n' || character === '\r' || character === '\t')) {
+      result += character === '\n' ? '\\n' : character === '\r' ? '\\r' : '\\t'
+      continue
+    }
+    result += character
+    if (escaped) escaped = false
+    else if (character === '\\' && inString) escaped = true
+    else if (character === '"') inString = !inString
+  }
+  return result
+}
+
+export function parseModelJson(value) {
+  const candidate = extractJsonObject(value)
+  if (!candidate) throw new Error('The model did not return a JSON object.')
+  try { return JSON.parse(candidate) } catch {
+    const repaired = escapeControlCharacters(candidate).replace(/,\s*([}\]])/g, '$1')
+    try { return JSON.parse(repaired) } catch {
+      const truncated = (candidate.match(/{/g)?.length || 0) > (candidate.match(/}/g)?.length || 0)
+      throw new Error(truncated ? 'The model response was cut off before its JSON was complete.' : 'The model returned malformed JSON.')
+    }
+  }
+}
+
+export const parseQuizJson = parseModelJson
 
 export function normalizeQuiz(raw, fallbackDescription = '') {
   if (!raw || !Array.isArray(raw.questions) || !raw.questions.length) throw new Error('The generated quiz does not contain any questions.')

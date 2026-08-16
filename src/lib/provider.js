@@ -26,6 +26,20 @@ export async function fetchModels(provider, signal) {
   return data.map((item) => typeof item === 'string' ? item : item.id).filter(Boolean).sort()
 }
 
+export function completionText(payload) {
+  const content = payload?.choices?.[0]?.delta?.content
+    ?? payload?.choices?.[0]?.message?.content
+    ?? payload?.choices?.[0]?.text
+    ?? payload?.delta?.text
+    ?? payload?.content
+    ?? payload?.text
+    ?? ''
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) return content.map((part) => typeof part === 'string' ? part : part?.text ?? part?.content ?? '').join('')
+  if (typeof content?.text === 'string') return content.text
+  return ''
+}
+
 export async function streamCompletion({ provider, model, messages, settings, signal, onToken }) {
   const response = await fetch(`${trimSlash(provider.baseUrl)}/chat/completions`, {
     method: 'POST', headers: providerHeaders(provider), signal,
@@ -42,7 +56,7 @@ export async function streamCompletion({ provider, model, messages, settings, si
     if (!data || data === '[DONE]') return
     try {
       const json = JSON.parse(data)
-      const token = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content ?? json.delta?.text ?? ''
+      const token = completionText(json)
       if (token) onToken(token)
     } catch { /* ignore keep-alive and non-JSON SSE frames */ }
   }
