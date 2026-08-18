@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal, ArrowDown, ArrowRight, ArrowSquareOut, BookOpen, Books, CaretLeft, CaretRight, ChatCircle, DownloadSimple, Exam, GearSix, House, PaperPlaneRight, Plus, Sparkle, Stop, Trash, X } from '@phosphor-icons/react'
+import { ArrowsInLineHorizontal, ArrowsOutLineHorizontal, ArrowRight, ArrowSquareOut, BookOpen, Books, CaretLeft, CaretRight, ChatCircle, CheckCircle, DownloadSimple, Exam, GearSix, House, PaperPlaneRight, Plus, Sparkle, Stop, Trash, X } from '@phosphor-icons/react'
 import Message from './components/Message'
 import SettingsPanel from './components/SettingsPanel'
 import Listbox from './components/Listbox'
@@ -120,7 +120,7 @@ export default function App() {
   const [storageError, setStorageError] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState(null)
-  const [autoFollow, setAutoFollow] = useState(true)
+  const [responseReadyId, setResponseReadyId] = useState(null)
   const [temperature, setTemperature] = useState(stored?.temperature ?? 0.7)
   const [wideChat, setWideChat] = useState(stored?.wideChat ?? false)
   const [selectionAction, setSelectionAction] = useState(null)
@@ -139,7 +139,6 @@ export default function App() {
   const indexedMessages = messages.map((message, index) => ({ message, index }))
   const assistantMessages = indexedMessages.filter(({ message }) => message.role === 'assistant')
   const userMessages = indexedMessages.filter(({ message }) => message.role === 'user')
-  const latestContent = messages.at(-1)?.content
   const provider = providers[activeProvider] || blankProvider
   const contextWindow = Number(provider.contextWindow) || 128000
   const contextMessages = messages.filter((item, index) => !(index === 0 && item.role === 'assistant' && item.content.startsWith('Halo! Saya **Chatty**')))
@@ -169,10 +168,11 @@ export default function App() {
           if (selectionAction?.source === 'ebook') return
           const anchorElement = selection.anchorNode?.nodeType === Node.ELEMENT_NODE ? selection.anchorNode : selection.anchorNode?.parentElement
           if (anchorElement?.closest('input, textarea, [contenteditable="true"], [data-selection-toolbar]')) return
-          const rect = selection.getRangeAt(0).getBoundingClientRect()
+          const range = selection.getRangeAt(0)
+          const rect = range.getBoundingClientRect()
           if (!rect.width && !rect.height) return
           const halfToolbar = Math.min(180, window.innerWidth / 2 - 8)
-          setSelectionAction({ text, chatActions: Boolean(anchorElement?.closest('[data-message-role="assistant"]')), x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
+          setSelectionAction({ text, range: range.cloneRange(), chatActions: Boolean(anchorElement?.closest('[data-message-role="assistant"]')), x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
         })
       }, 0)
     }
@@ -181,7 +181,6 @@ export default function App() {
     document.addEventListener('keyup', showPronunciationAction)
     return () => { clearTimeout(timer); cancelAnimationFrame(frame); document.removeEventListener('mouseup', showPronunciationAction); document.removeEventListener('touchend', showPronunciationAction); document.removeEventListener('keyup', showPronunciationAction); window.speechSynthesis?.cancel() }
   }, [selectionAction?.source])
-  useEffect(() => { if (autoFollow && messages.length) virtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: streaming ? 'auto' : 'smooth' }) }, [messages.length, latestContent, autoFollow, streaming, virtualizer])
   useEffect(() => { virtualizer.measure() }, [wideChat, virtualizer])
   useEffect(() => {
     if ((initialRoute.page === 'chat' && !initialRouteChat) || (initialRoute.page === 'workspace' && !initialRouteWorkspace) || ((initialRoute.page === 'vocabulary-language' || initialRoute.page === 'vocabulary-practice') && !initialRouteLanguage)) window.history.replaceState({}, '', '/')
@@ -326,6 +325,7 @@ export default function App() {
     setRoute({ page: 'chat', chatId: chat.id })
     setActiveId(chat.id)
     setActiveWorkspaceId(chat.workspaceId)
+    setResponseReadyId(null)
     setSidebarOpen(false)
   }
   const newChat = (workspaceId = activeWorkspace?.id || workspaces[0].id) => { const next = { id: id(), workspaceId, title: 'New conversation', messages: [createWelcome()], createdAt: Date.now() }; setConversations((all) => [next, ...all]); openChat(next); setFollowUpQuote('') }
@@ -391,20 +391,22 @@ export default function App() {
   }
 
   const requestChatCompletion = async (assistantId, history) => {
-    setStreaming(true); setStreamingMessageId(assistantId); setAutoFollow(true)
+    setStreaming(true); setStreamingMessageId(assistantId); setResponseReadyId(null)
     const controller = new AbortController()
+    let completed = false
     abortRef.current = controller
     let queued = ''; let frame = null
     const flush = () => { if (!queued) return; const chunk = queued; queued = ''; updateConversation((chat) => ({ ...chat, messages: chat.messages.map((item) => item.id === assistantId ? { ...item, content: item.content + chunk } : item) })); frame = null }
     try {
       await streamCompletion({ provider: normalizeProvider(provider), model: provider.model, messages: [{ role: 'system', content: [NATURAL_STYLE_PROMPT, provider.instructions?.trim(), activeWorkspace?.instructions?.trim(), GRAMMAR_ASSIST_PROMPT].filter(Boolean).join('\n\n') }, ...buildChatContext(history)], settings: { temperature, maxTokens: OUTPUT_RESERVE }, signal: controller.signal, onToken: (token) => { queued += token; if (!frame) frame = requestAnimationFrame(flush) } })
       flush()
+      completed = true
     } catch (error) {
       if (error.name !== 'AbortError') updateConversation((chat) => ({ ...chat, messages: chat.messages.map((item) => item.id === assistantId ? { ...item, error: error.message } : item) }))
     } finally {
       if (frame) cancelAnimationFrame(frame)
       flush()
-      if (abortRef.current === controller) { setStreaming(false); setStreamingMessageId(null); abortRef.current = null }
+      if (abortRef.current === controller) { setStreaming(false); setStreamingMessageId(null); if (completed) setResponseReadyId(assistantId); abortRef.current = null }
     }
   }
 
@@ -434,7 +436,6 @@ export default function App() {
   const onScroll = () => {
     const el = scrollRef.current
     if (el) {
-      setAutoFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 100)
       const viewportTop = el.scrollTop + 8
       const visibleRows = virtualizer.getVirtualItems()
       const rowAtTop = visibleRows.find((row) => row.start <= viewportTop && row.end > viewportTop)
@@ -604,7 +605,8 @@ export default function App() {
           return <button key={message.id} type="button" onClick={() => jumpToMessage(index)} title={label} aria-label={`Jump to your message ${messageIndex + 1}: ${label}`} aria-current={active ? 'true' : undefined} className={`group relative z-10 flex min-h-11 w-full shrink-0 cursor-pointer flex-row-reverse items-center gap-2 rounded-lg py-1.5 pl-2 pr-1.5 text-right transition-colors duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-600 dark:focus-visible:ring-purple-300 ${active ? 'bg-purple-100 text-purple-950 dark:bg-purple-500/20 dark:text-purple-100' : 'text-slate-500 hover:bg-purple-50 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100'}`}><span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-md shadow-[0_0_0_3px_rgba(255,255,255,0.96)] transition-[background-color,transform] duration-300 ease-out group-hover:scale-110 group-active:scale-90 motion-reduce:transform-none dark:shadow-[0_0_0_3px_rgba(15,23,42,0.96)] ${active ? 'bg-purple-600 dark:bg-purple-300' : 'bg-purple-300 dark:bg-purple-500'}`} /><span className="line-clamp-2 min-w-0 text-xs leading-4 font-medium">{label}</span></button>
         })}
       </nav></>}
-      <div ref={scrollRef} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">{messages.length === 1 && !streaming ? null : <><DoodleField /><div className="relative mx-auto w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>{virtualizer.getVirtualItems().map((row) => <div key={row.key} data-index={row.index} ref={virtualizer.measureElement} className="absolute left-0 top-0 w-full" style={{ transform: `translateY(${row.start}px)` }}><Message message={messages[row.index]} wide={wideChat} streaming={streamingMessageId === messages[row.index].id} onRetry={messages[row.index].error ? retryChat : undefined} onDelete={deleteMessage} onSelectionAction={messages[row.index].role === 'assistant' ? setSelectionAction : undefined} /></div>)}</div></>}{!autoFollow && <button onClick={() => { setAutoFollow(true); virtualizer.scrollToIndex(messages.length - 1, { align: 'end', behavior: 'smooth' }) }} className="sticky bottom-3 left-1/2 flex h-9 -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-gradient-to-r from-slate-950 to-purple-900 px-3 text-sm font-medium text-white shadow-[0_10px_28px_rgba(76,29,149,0.25)] transition-[transform,box-shadow] duration-300 ease-out  active:scale-[0.97] motion-reduce:transform-none dark:from-white dark:to-purple-100 dark:text-slate-900"><ArrowDown size={16} />Jump to latest</button>}</div>
+      <div ref={scrollRef} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]">{messages.length === 1 && !streaming ? null : <><DoodleField /><div className="relative mx-auto w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>{virtualizer.getVirtualItems().map((row) => <div key={row.key} data-index={row.index} ref={virtualizer.measureElement} className="absolute left-0 top-0 w-full" style={{ transform: `translateY(${row.start}px)` }}><Message message={messages[row.index]} wide={wideChat} streaming={streamingMessageId === messages[row.index].id} onRetry={messages[row.index].error ? retryChat : undefined} onDelete={deleteMessage} onSelectionAction={messages[row.index].role === 'assistant' ? setSelectionAction : undefined} /></div>)}</div></>}</div>
+      {responseReadyId && <button onClick={() => setResponseReadyId(null)} aria-label="Dismiss response-ready notification" className="absolute bottom-24 left-1/2 z-30 flex h-9 -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-gradient-to-r from-slate-950 to-purple-900 px-3 text-sm font-medium text-white shadow-[0_10px_28px_rgba(76,29,149,0.25)] transition-[transform,box-shadow] duration-300 ease-out active:scale-[0.97] motion-reduce:transform-none dark:from-white dark:to-purple-100 dark:text-slate-900" role="status"><CheckCircle size={16} weight="fill" />AI response ready</button>}
 
       <footer className="relative z-20 shrink-0 px-3 pb-3 sm:px-4"><div className={`mx-auto w-full ${wideChat ? 'max-w-5xl' : 'max-w-3xl'} rounded-xl border border-white/40 bg-white/75 p-2 shadow-[0_14px_42px_rgba(76,29,149,0.16)] backdrop-blur-xl transition-[transform,box-shadow,border-color] duration-500 ease-out focus-within:border-purple-300 focus-within:shadow-[0_20px_50px_rgba(76,29,149,0.22)] motion-reduce:transform-none dark:border-white/10 dark:bg-slate-900/75`}>{followUpQuote && <div className="mx-2 mb-1 flex items-start gap-2 rounded-lg bg-purple-50 p-2 text-slate-600 dark:bg-purple-500/10 dark:text-slate-300"><span className="mt-0.5 h-full min-h-8 w-0.5 shrink-0 rounded-full bg-purple-400" /><p className="line-clamp-3 min-w-0 flex-1 whitespace-pre-wrap">{followUpQuote}</p><button onClick={() => setFollowUpQuote('')} aria-label="Remove quote" className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-500 transition-colors duration-300 hover:bg-purple-100 dark:hover:bg-purple-500/15"><X size={15} /></button></div>}<textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} rows="1" placeholder="Write an idea, question, or challenge…" className="max-h-40 min-h-10 w-full resize-none rounded-lg bg-transparent px-3 py-2 text-sm leading-5 text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100" /><div className="flex items-end justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><div className="w-44"><Listbox value={provider.model} options={models} onChange={(value) => updateProvider('model', value)} disabled={!models.length} placeholder="Select model" compact placement="top" searchable searchPlaceholder="Search models…" /></div><ContextMeter tokens={contextTokens} windowSize={contextWindow} reserve={OUTPUT_RESERVE} percent={contextPercent} remaining={contextRemaining} label={contextLabel} widthClass={contextWidthClass(contextPercent)} /><label className="group relative hidden items-center gap-2 rounded-lg bg-slate-100/70 px-2 py-1.5 text-sm text-slate-500 sm:flex dark:bg-white/5"><span>Creativity</span><input aria-label="Model creativity" aria-describedby="creativity-help" type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} className="h-1.5 w-16 cursor-pointer appearance-none rounded-full bg-slate-200 accent-purple-600 dark:bg-slate-700" /><span className="w-5 tabular-nums">{temperature.toFixed(1)}</span><span id="creativity-help" role="tooltip" className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-50 w-56 -translate-x-1/2 rounded-lg bg-slate-950 px-3 py-2 text-xs leading-4 text-white opacity-0 shadow-[0_14px_35px_rgba(15,23,42,0.22)] transition-opacity duration-300 ease-out group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-white dark:text-slate-900">Controls response variety. Lower values are more focused and consistent; higher values are more varied and exploratory.</span></label><button type="button" onClick={() => setWideChat((current) => !current)} aria-pressed={wideChat} aria-label={wideChat ? 'Use compact chat width' : 'Use wide chat width'} title={wideChat ? 'Compact chat width' : 'Wide chat width'} className="hidden h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-slate-100/70 text-slate-500 transition-[transform,background-color,color] duration-300 ease-out hover:bg-purple-100 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 active:scale-[0.96] motion-reduce:transform-none sm:flex dark:bg-white/5 dark:text-slate-300 dark:hover:bg-purple-500/15 dark:hover:text-purple-300">{wideChat ? <ArrowsInLineHorizontal size={16} /> : <ArrowsOutLineHorizontal size={16} />}</button></div>{streaming ? <button onClick={() => abortRef.current?.abort()} className="flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-medium text-white transition-[transform,background-color] duration-300 ease-out hover:bg-slate-800 active:scale-[0.97] motion-reduce:transform-none dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"><Stop size={16} weight="fill" />Stop</button> : <button onClick={send} disabled={!input.trim()} aria-label="Send message" title="Send" className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 text-white shadow-[0_8px_22px_rgba(126,34,206,0.24)] transition-opacity duration-300 ease-out disabled:cursor-not-allowed disabled:opacity-40"><PaperPlaneRight size={17} weight="bold" /></button>}</div></div></footer>
       </>}

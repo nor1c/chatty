@@ -103,9 +103,10 @@ const Message = memo(function Message({ message, wide = false, streaming, onRetr
       const selection = window.getSelection()
       const text = selection?.toString().trim()
       if (!text || !articleRef.current?.contains(selection.anchorNode)) { onSelectionAction(null); return }
-      const rect = selection.getRangeAt(0).getBoundingClientRect()
+      const range = selection.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
       const halfToolbar = Math.min(180, window.innerWidth / 2 - 8)
-      onSelectionAction({ text, chatActions: true, x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
+      onSelectionAction({ text, range: range.cloneRange(), chatActions: true, x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
     })
   }
 

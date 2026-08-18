@@ -80,10 +80,11 @@ function Reader({ ebook, pages, page, setPage, onClose, onSelection }) {
       if (!text || !selection.rangeCount) return
       const anchor = selection.anchorNode?.nodeType === Node.ELEMENT_NODE ? selection.anchorNode : selection.anchorNode?.parentElement
       if (!anchor?.closest('[data-ebook-reading-page]')) return
-      const rect = selection.getRangeAt(0).getBoundingClientRect()
+      const range = selection.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
       if (!rect.width && !rect.height) return
       const halfToolbar = Math.min(180, window.innerWidth / 2 - 8)
-      onSelection?.({ text, context: `Ebook: ${ebook.title}. Current reading page: ${page + 1} of ${pages.length}.`, askActions: true, x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
+      onSelection?.({ text, range: range.cloneRange(), context: `Ebook: ${ebook.title}. Current reading page: ${page + 1} of ${pages.length}.`, askActions: true, x: Math.min(window.innerWidth - halfToolbar, Math.max(halfToolbar, rect.left + rect.width / 2)), y: Math.max(8, rect.top - 48) })
     }, 0)
   }
   return <div className="flex min-h-0 flex-1 flex-col bg-slate-100 dark:bg-slate-950"><header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 bg-white px-3 py-2 shadow-[0_6px_20px_rgba(15,23,42,0.10)] dark:bg-slate-900"><button type="button" onClick={onClose} className={secondary}><ArrowLeft size={16} />Library</button><div className="min-w-0 flex-1"><h1 className="truncate text-sm font-semibold">{ebook.title}</h1><p className="text-xs text-slate-500">{ebookWordCount(ebook).toLocaleString()} words · {pages.length} reading pages</p></div><button type="button" onClick={printCompleteBook} className={secondary}><Printer size={16} />Print / PDF</button><button type="button" onClick={download} className={secondary}><DownloadSimple size={16} />HTML</button></header>

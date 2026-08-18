@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CaretDown, ChatCircleDots, Check, MagnifyingGlass, Plus, SpeakerHigh, UserSound, X } from '@phosphor-icons/react'
 import { matchingVoices, PRONUNCIATION_LANGUAGES, speakWord, VOICE_PREVIEW_TEXT } from '../lib/pronunciation'
@@ -55,6 +55,36 @@ export default function SelectionToolbar({ selection, chatActions = false, askAc
   const language = PRONUNCIATION_LANGUAGES.find((item) => item.code === languageCode) || PRONUNCIATION_LANGUAGES.at(-2)
   const filteredLanguages = PRONUNCIATION_LANGUAGES.filter((item) => `${item.name} ${item.country}`.toLowerCase().includes(languageQuery.trim().toLowerCase()))
 
+  useLayoutEffect(() => {
+    const range = selection?.range
+    if (!range || !range.commonAncestorContainer?.isConnected) return undefined
+
+    const current = window.getSelection()
+    if (current && (!current.rangeCount || !current.toString())) {
+      current.removeAllRanges()
+      current.addRange(range.cloneRange())
+    }
+
+    if (!window.CSS?.highlights || typeof Highlight === 'undefined') return undefined
+    const highlightStyle = document.createElement('style')
+    highlightStyle.dataset.chattySelectionHighlight = 'true'
+    highlightStyle.textContent = `
+      ::highlight(chatty-selection) {
+        color: inherit;
+        background-color: rgb(196 181 253 / 0.72);
+      }
+      .dark ::highlight(chatty-selection) {
+        background-color: rgb(126 34 206 / 0.58);
+      }
+    `
+    document.head.appendChild(highlightStyle)
+    window.CSS.highlights.set('chatty-selection', new Highlight(range.cloneRange()))
+    return () => {
+      window.CSS.highlights.delete('chatty-selection')
+      highlightStyle.remove()
+    }
+  }, [selection])
+
   useEffect(() => {
     if (!selection || !toolbarRef.current || voicePickerOpen) return undefined
     toolbarRef.current.style.left = `${selection.x}px`
@@ -69,7 +99,7 @@ export default function SelectionToolbar({ selection, chatActions = false, askAc
   useEffect(() => { if (!selection) { setLanguagesOpen(false); setVoicePickerOpen(false) } }, [selection])
   if (!selection) return null
 
-  return <div ref={toolbarRef} data-selection-toolbar role="toolbar" aria-label="Actions for selected text" className="fixed z-[65] flex max-w-[calc(100vw-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_14px_35px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900">
+  return <div ref={toolbarRef} data-selection-toolbar role="toolbar" aria-label="Actions for selected text" onMouseDown={(event) => { if (event.target.closest('button')) event.preventDefault() }} className="fixed z-[65] flex max-w-[calc(100vw-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_14px_35px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900">
     {chatActions && <button type="button" onClick={() => onFollowUp(selection.text)} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm text-slate-700 transition-colors duration-300 ease-out hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:text-slate-200 dark:hover:bg-purple-500/10"><Plus size={15} />Add follow-up</button>}
     {(chatActions || askActions) && <><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => onAsk(selection.text)} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm text-slate-700 transition-colors duration-300 ease-out hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:text-slate-200 dark:hover:bg-purple-500/10"><ChatCircleDots size={15} />Ask AI</button><span aria-hidden="true" className="h-5 w-px bg-slate-200 dark:bg-slate-700" /></>}
     <button type="button" onClick={() => onPronounce(selection.text)} className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm text-slate-700 transition-colors duration-300 ease-out hover:bg-purple-50 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/10 dark:text-slate-200 dark:hover:bg-purple-500/10 dark:hover:text-purple-300"><SpeakerHigh size={15} />Pronounce</button>
