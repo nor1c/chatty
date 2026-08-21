@@ -5,6 +5,7 @@ const QUIZ_PREFIX = '/quiz'
 const VOCABULARY_PATH = '/vocabulary'
 const VOCABULARY_PREFIX = '/vocabulary/'
 const EBOOK_PATH = '/ebook-maker'
+const MIND_MAP_PATH = '/mind-map'
 
 const decodeSegment = (value) => {
   try { return decodeURIComponent(value) } catch { return '' }
@@ -17,6 +18,14 @@ export function readRoute(pathname = window.location.pathname) {
   if (normalized === QUIZ_PREFIX) return { page: 'quiz', quizView: 'categories' }
   if (normalized === VOCABULARY_PATH) return { page: 'vocabulary' }
   if (normalized === EBOOK_PATH) return { page: 'ebook' }
+  if (normalized === MIND_MAP_PATH) return { page: 'mind-map' }
+  if (normalized.startsWith(`${MIND_MAP_PATH}/`)) {
+    const encodedId = normalized.slice(MIND_MAP_PATH.length + 1)
+    if (encodedId && !encodedId.includes('/')) {
+      const mindMapId = decodeSegment(encodedId)
+      if (mindMapId) return { page: 'mind-map-detail', mindMapId }
+    }
+  }
   if (normalized.startsWith(VOCABULARY_PREFIX)) {
     const vocabularySegments = normalized.slice(VOCABULARY_PREFIX.length).split('/')
     const languageId = decodeSegment(vocabularySegments[0])
@@ -77,6 +86,8 @@ export function workspacePath(workspaceId) {
 export const workspacesPath = WORKSPACES_PATH
 export const vocabularyPath = VOCABULARY_PATH
 export const ebookPath = EBOOK_PATH
+export const mindMapPath = MIND_MAP_PATH
+export const mindMapDetailPath = (mindMapId) => `${MIND_MAP_PATH}/${encodeURIComponent(mindMapId)}`
 export const vocabularyLanguagePath = (languageId) => `${VOCABULARY_PREFIX}${encodeURIComponent(languageId)}`
 export const vocabularyPracticePath = (languageId) => `${vocabularyLanguagePath(languageId)}/practice`
 
