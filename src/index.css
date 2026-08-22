@@ -6,4 +6,10 @@
 @theme {
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --animate-word-rain-fall: word-rain-fall linear forwards;
+
+  @keyframes word-rain-fall {
+    from { transform: translateY(-10%); }
+    to { transform: translateY(calc(54dvh - 2.5rem)); }
+  }
 }
