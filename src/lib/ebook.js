@@ -4,7 +4,7 @@ export function normalizeEbookMetadata(value) {
   if (!text(value?.title)) throw new Error('The provider returned incomplete ebook metadata.')
   return {
     title: text(value.title), subtitle: text(value.subtitle), author: text(value.author) || 'ShinkuChat AI',
-    language: text(value.language) || 'Indonesian', coverPrompt: text(value.coverPrompt),
+    language: text(value.language) || 'English', coverPrompt: text(value.coverPrompt),
     endingTitle: text(value.endingTitle) || 'Closing', endingSummary: text(value.endingSummary),
   }
 }
